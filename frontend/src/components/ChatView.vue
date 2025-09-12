@@ -9,7 +9,12 @@
         :key="idx"
         :class="msg.type === 'send' ? 'chat-send-message' : 'chat-receive-message'"
       >
-        {{ msg.text }}
+        <template v-if="msg.type === 'receive'">
+          <div v-html="marked(msg.text)"></div>
+        </template>
+        <template v-else>
+          {{ msg.text }}
+        </template>
       </div>
     </div>
     <div class="chat-input">
@@ -26,6 +31,7 @@
 
 <script lang="ts" setup>
 import { ref } from 'vue';
+import { marked } from 'marked';
 
 interface ChatMessage {
   text: string;
