@@ -9,7 +9,7 @@ export const GeminiProModelProvider: Provider<GenerativeModel> = {
   useFactory: () => {
     const genAI = new GoogleGenerativeAI(envConfig.GEMINI.GEMINI_API_KEY);
     return genAI.getGenerativeModel({
-      model: envConfig.GEMINI.GEMINI_MODEL,
+      model: 'gemini-2.0-pro',
       generationConfig: GENERATION_CONFIG,
       safetySettings: SAFETY_SETTINGS,
     });
@@ -20,7 +20,7 @@ export const GeminiFlashModelProvider: Provider<GenerativeModel> = {
   useFactory: () => {
     const genAI = new GoogleGenerativeAI(envConfig.GEMINI.GEMINI_API_KEY);
     return genAI.getGenerativeModel({
-      model: envConfig.GEMINI.GEMINI_MODEL,
+      model: 'gemini-2.0-flash',
       generationConfig: GENERATION_CONFIG,
       safetySettings: SAFETY_SETTINGS,
     });

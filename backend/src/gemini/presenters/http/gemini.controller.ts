@@ -19,8 +19,9 @@ export class GeminiController {
   generateText(@Body() dto: GenerateTextDto): Promise<GenAiResponse> {
     return this.service.generateText(dto.prompt);
   }
+
   @Get()
   sayHello(): string {
-    return 'Hello, Gemini!';
+    return 'Hello from Gemini!';
   }
 }
