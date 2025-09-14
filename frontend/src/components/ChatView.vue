@@ -23,15 +23,17 @@
         placeholder="Type your message..."
         v-model="inputText"
         @keyup.enter="sendMessage"
-      />
-      <button @click="sendMessage">Send</button>
-    </div>
+        :disabled="isStreaming" />
+      <button @click="sendMessage" :disabled="isStreaming"> {{ isStreaming ? '...' : 'Send' }} </button>
+</div>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
+import { io, Socket } from 'socket.io-client';
+
 
 interface ChatMessage {
   text: string;
@@ -40,65 +42,67 @@ interface ChatMessage {
 
 const inputText = ref('');
 const messages = ref<ChatMessage[]>([]);
+const isStreaming = ref(false);
+
+let socket: Socket;
+
+onMounted(() => {
+  socket = io('http://localhost:3000', {
+    transports: ['websocket'],
+  });
+
+  socket.on('connect', () => {
+    console.log('Connected to server. Socket ID:', socket.id);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Disconnected from server. Reason: ', socket.disconnected);
+  });
+
+  socket.on('new_chunk', (data: { text: string}) => {
+    if (messages.value.length > 0) {
+      const lastMessage = messages.value[messages.value.length - 1];
+      if (lastMessage.type === 'receive') {
+        lastMessage.text += data.text;
+      }
+    }
+  })
+
+socket.on('stream_end', () => {
+    isStreaming.value = false;
+  });
+
+  socket.on('steram_error', (data: { message: string}) => {
+    console.error('Socket error:', data.message);
+    messages.value.push({
+      text: `Error: ${data.message}`,
+      type: 'receive',
+    });
+    isStreaming.value = false;
+  });
+
+});
+onUnmounted(() => {
+  if (socket) {
+    socket.disconnect();
+  }
+});
+
 
 async function sendMessage() {
   const text = inputText.value.trim();
-  if (text) {
-    messages.value.push({ text, type: 'send' });
-    inputText.value = '';
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超時
-
-      const response = await fetch('http://localhost:3000/gemini/text', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text.toString() }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!response.ok || !response.body) {
-        throw new Error('Network response was not ok');
-      }
-
-      // 新增一個空訊息，之後逐步填充
-      const receiveMsg = { text: '', type: 'receive' as const };
-      messages.value.push(receiveMsg);
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let buffer = '';
-
-      while (!done) {
-        const { value, done: streamDone } = await reader.read();
-        if (value) {
-          buffer += decoder.decode(value, { stream: !streamDone });
-          try {
-            // 嘗試解析最新的 JSON
-            const data = JSON.parse(buffer);
-            if (typeof data.text === 'string') {
-              receiveMsg.text = data.text;
-              messages.value = [...messages.value]; // 強制刷新
-              buffer = ''; // 清空 buffer
-            }
-          } catch (e) {
-            // 尚未接收完整 JSON，繼續累積
-          }
-        }
-        done = streamDone;
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        // 請求被手動中止，不顯示錯誤訊息
-        return;
-      }
-      console.error('Error sending message:', error);
-      messages.value.push({ text: 'Error: Unable to send message.', type: 'receive' });
-    }
+  if (!text || !socket || isStreaming.value) {
+    return;
   }
+
+  isStreaming.value = true;
+
+  messages.value.push({ text, type: 'send' });
+  inputText.value = '';
+
+  messages.value.push({ text: '', type: 'receive' });
+
+  socket.emit('chat', { prompt: text });
 }
 </script>
 
