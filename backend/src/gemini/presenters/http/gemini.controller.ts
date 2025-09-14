@@ -9,19 +9,4 @@ import { GenerateTextDto } from './dto/generate-text.dto';
 @Controller('gemini')
 export class GeminiController {
   constructor(private service: GeminiService) {}
-
-  @ApiBody({
-    description: 'Prompt',
-    required: true,
-    type: GenerateTextDto,
-  })
-  @Post('text')
-  generateText(@Body() dto: GenerateTextDto): Promise<GenAiResponse> {
-    return this.service.generateText(dto.prompt);
-  }
-
-  @Get()
-  sayHello(): string {
-    return 'Hello from Gemini!';
-  }
 }

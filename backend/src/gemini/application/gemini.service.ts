@@ -1,35 +1,48 @@
-import { GenerativeModel } from '@google/generative-ai';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { GenAiResponse } from '../../gemini/domain/interface/response.interface';
-import { createContent } from './helpers/content.helper';
-import { GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL } from './gemini.constant';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Injectable, Logger } from '@nestjs/common';
 import { envConfig } from 'src/config/env.config';
+import { Socket } from 'socket.io';
 
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
+  private genAI: GoogleGenerativeAI;
 
-  constructor(
-    @Inject(GEMINI_PRO_MODEL) private readonly proModel: GenerativeModel,
-    @Inject(GEMINI_FLASH_MODEL) private readonly flashModel: GenerativeModel,
-  ) {}
+  constructor() {
+    const GEMINI_API_KEY = envConfig.GEMINI.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not defined in environment variables');
+    }
+    this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    this.logger.log('GoogleGenerativeAI client initialized');
+  }
 
-  async generateText(prompt: string): Promise<GenAiResponse> {
-    const contents = createContent(prompt);
+  // Process GEMINI stream and emit to client
+  async generateContentStream(client: Socket, prompt: string): Promise<void> {
+    const model = this.genAI.getGenerativeModel({
+      model: envConfig.GEMINI.GEMINI_MODEL,
+    });
+    try {
+      const result = await model.generateContentStream(prompt);
 
-    const modelType = envConfig.GEMINI.GEMINI_MODEL.includes('flash')
-      ? 'flash'
-      : 'pro';
-    const model = modelType === 'flash' ? this.flashModel : this.proModel;
-    this.logger.log(`Using Model: ${envConfig.GEMINI.GEMINI_MODEL}`);
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        if (chunkText) {
+          client.emit('new_chunk', { text: chunkText });
+        }
+      }
 
-    const { totalTokens } = await model.countTokens({ contents });
-    this.logger.log(`Consuming Tokens: ${JSON.stringify(totalTokens)}`);
-
-    const result = await model.generateContent({ contents });
-    const response = result.response;
-    const text = response.text();
-
-    return { totalTokens, text };
+      this.logger.log(`Stream completed for client: ${client.id}`);
+    } catch (error) {
+      this.logger.error(
+        `Error during Gemini stream for client ${client.id}`,
+        error,
+      );
+      client.emit('stream_error', {
+        message: 'An error occurred while processing your request.',
+      });
+    } finally {
+      client.emit('stream_end');
+    }
   }
 }

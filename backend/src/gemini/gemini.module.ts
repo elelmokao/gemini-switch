@@ -5,9 +5,15 @@ import {
   GeminiProModelProvider,
   GeminiFlashModelProvider,
 } from './application/gemini.provider';
+import { GeminiGateway } from './gemini.gateway';
 
 @Module({
   controllers: [GeminiController],
-  providers: [GeminiService, GeminiProModelProvider, GeminiFlashModelProvider],
+  providers: [
+    GeminiService,
+    GeminiProModelProvider,
+    GeminiFlashModelProvider,
+    GeminiGateway,
+  ],
 })
 export class GeminiModule {}
