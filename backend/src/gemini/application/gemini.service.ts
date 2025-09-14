@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Content, GoogleGenerativeAI } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { envConfig } from 'src/config/env.config';
 import { Socket } from 'socket.io';
@@ -18,12 +18,17 @@ export class GeminiService {
   }
 
   // Process GEMINI stream and emit to client
-  async generateContentStream(client: Socket, prompt: string): Promise<void> {
+  async generateContentStream(
+    client: Socket,
+    prompt: string,
+    history: Content[],
+  ): Promise<void> {
     const model = this.genAI.getGenerativeModel({
       model: envConfig.GEMINI.GEMINI_MODEL,
     });
+    const chat = model.startChat({ history: history || [] });
     try {
-      const result = await model.generateContentStream(prompt);
+      const result = await chat.sendMessageStream(prompt);
 
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();

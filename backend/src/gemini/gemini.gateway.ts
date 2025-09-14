@@ -8,6 +8,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { GeminiService } from './application/gemini.service';
+import { Content } from '@google/generative-ai'; // 引入 Content 型別
 
 @WebSocketGateway({
   cors: {
@@ -22,17 +23,14 @@ export class GeminiGateway {
 
   @SubscribeMessage('chat')
   handleMessage(
-    @MessageBody() payload: { prompt: string },
+    @MessageBody() payload: { prompt: string; history: Content[] },
     @ConnectedSocket() client: Socket,
   ): void {
-    console.log('--- Received payload from Postman ---');
-    console.log(payload);
-    console.log('------------------------------------');
     this.logger.log(`Received message from ${client.id}: ${payload.prompt}`);
 
     // IMPORTANT: Call GeminiService to process stream.
     this.geminiService
-      .generateContentStream(client, payload.prompt)
+      .generateContentStream(client, payload.prompt, payload.history)
       .catch((err: Error) => {
         this.logger.error(
           `Error in generateContentStream: ${err?.message}`,

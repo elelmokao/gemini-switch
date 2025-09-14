@@ -97,12 +97,22 @@ async function sendMessage() {
 
   isStreaming.value = true;
 
+  // turn historical msgs to Gemini Content[]
+  const historyForApi = messages.value
+    .filter(msg => msg.text && msg.text.trim() !== '')
+    .map(msg => ({
+      role: msg.type === 'send' ? 'user' : 'model',
+      parts: [{ text: msg.text }],
+    }));
   messages.value.push({ text, type: 'send' });
   inputText.value = '';
 
   messages.value.push({ text: '', type: 'receive' });
 
-  socket.emit('chat', { prompt: text });
+  socket.emit('chat', {
+    prompt: text,
+    history: historyForApi,
+  });
 }
 </script>
 
