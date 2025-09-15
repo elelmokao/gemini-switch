@@ -1,8 +1,9 @@
-import { Content, GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { envConfig } from 'src/config/env.config';
 import { Socket } from 'socket.io';
-
+import type { ChatPayload } from '../domain/interface/response.interface';
+import { ALLOWED_MODELS } from './gemini.constant';
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
@@ -20,15 +21,21 @@ export class GeminiService {
   // Process GEMINI stream and emit to client
   async generateContentStream(
     client: Socket,
-    prompt: string,
-    history: Content[],
+    payload: ChatPayload,
   ): Promise<void> {
+    const useModel = ALLOWED_MODELS.includes(payload.model)
+      ? payload.model
+      : envConfig.GEMINI.GEMINI_MODEL;
+
     const model = this.genAI.getGenerativeModel({
-      model: envConfig.GEMINI.GEMINI_MODEL,
+      model: useModel,
     });
-    const chat = model.startChat({ history: history || [] });
+    const chat = model.startChat({ history: payload.history || [] });
+    this.logger.log(
+      `Starting stream for client: ${client.id} using model: ${useModel}`,
+    );
     try {
-      const result = await chat.sendMessageStream(prompt);
+      const result = await chat.sendMessageStream(payload.prompt);
 
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();
@@ -48,6 +55,7 @@ export class GeminiService {
       });
     } finally {
       client.emit('stream_end');
+      this.logger.log(`Stream ended for client: ${client.id}`);
     }
   }
 }

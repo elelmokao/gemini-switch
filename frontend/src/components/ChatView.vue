@@ -1,7 +1,11 @@
 <template>
   <div class="chat-room">
     <div class="chat-header">
-      <h2>Chat Header</h2>
+      <h2 style="margin: 0;">Chat Header</h2>
+      <select v-model="selectedModel">
+      <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+      </select>
     </div>
     <div class="chat-messages">
       <div
@@ -43,6 +47,7 @@ interface ChatMessage {
 const inputText = ref('');
 const messages = ref<ChatMessage[]>([]);
 const isStreaming = ref(false);
+const selectedModel = ref('gemini-2.0-flash');
 
 let socket: Socket;
 
@@ -72,14 +77,14 @@ socket.on('stream_end', () => {
     isStreaming.value = false;
   });
 
-  socket.on('steram_error', (data: { message: string}) => {
-    console.error('Socket error:', data.message);
-    messages.value.push({
-      text: `Error: ${data.message}`,
-      type: 'receive',
-    });
-    isStreaming.value = false;
+socket.on('steram_error', (data: { message: string}) => {
+  console.error('Socket error:', data.message);
+  messages.value.push({
+    text: `Error: ${data.message}`,
+    type: 'receive',
   });
+  isStreaming.value = false;
+});
 
 });
 onUnmounted(() => {
@@ -112,6 +117,7 @@ async function sendMessage() {
   socket.emit('chat', {
     prompt: text,
     history: historyForApi,
+    model: selectedModel.value,
   });
 }
 </script>
@@ -131,6 +137,9 @@ async function sendMessage() {
   padding: 16px;
   border-bottom: 1px solid #eee;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .chat-messages {
   flex: 1 1 0;
