@@ -13,7 +13,7 @@ export class ApiKey {
   @Column({ type: 'uuid', nullable: true })
   user_id: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, unique: true })
   api_key: string;
 
   @Column({ type: 'text', nullable: true })

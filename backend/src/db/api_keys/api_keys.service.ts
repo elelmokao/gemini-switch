@@ -19,4 +19,12 @@ export class ApiKeysService {
   async getAllApiKeys(): Promise<ApiKey[]> {
     return this.apiKeysRepository.find();
   }
+
+  async getApiKeyByApiKey(api_key: string): Promise<ApiKey | null> {
+    return this.apiKeysRepository.findOneBy({ api_key: api_key });
+  }
+
+  async deleteApiKey(api_key: string): Promise<void> {
+    await this.apiKeysRepository.delete({ api_key: api_key });
+  }
 }
