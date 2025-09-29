@@ -4,6 +4,9 @@ import { AppService } from './app.service';
 import { GeminiModule } from './gemini/gemini.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApiKeysModule } from './db/api_keys/api_keys.module';
+import { ChatroomsModule } from './db/chatrooms/chatrooms.module';
+import { ChatroomMessagesModule } from './db/chatroom_messages/chatroom_messages.module';
+import { PersonasModule } from './db/personas/personas.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { ApiKeysModule } from './db/api_keys/api_keys.module';
     }),
     GeminiModule,
     ApiKeysModule,
+    ChatroomsModule,
+    ChatroomMessagesModule,
+    PersonasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

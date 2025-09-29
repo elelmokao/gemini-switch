@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -6,6 +7,7 @@ import { CreateApiKeysDto } from './dto/create_api_keys.dto';
 
 @Injectable()
 export class ApiKeysService {
+  private readonly logger = new Logger(ApiKeysService.name);
   constructor(
     @InjectRepository(ApiKey)
     private apiKeysRepository: Repository<ApiKey>,
@@ -21,7 +23,15 @@ export class ApiKeysService {
   }
 
   async getApiKeyByApiKey(api_key: string): Promise<ApiKey | null> {
-    return this.apiKeysRepository.findOneBy({ api_key: api_key });
+    try {
+      const apiKey = await this.apiKeysRepository.findOneBy({
+        api_key: api_key,
+      });
+      return apiKey;
+    } catch (error) {
+      this.logger.error('Error fetching API key:', error);
+      return null;
+    }
   }
 
   async deleteApiKey(api_key: string): Promise<void> {
