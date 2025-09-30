@@ -2,10 +2,18 @@
   <div class="chat-room">
     <div class="chat-header">
       <h2 style="margin: 0;">Chat Header</h2>
-      <select v-model="selectedModel">
-      <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-      </select>
+      <Select v-model="selectedModel">
+        <SelectTrigger class="w-[200px]">
+          <SelectValue placeholder="Select Model" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+        <SelectLabel>Models</SelectLabel>
+        <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+        <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
     </div>
     <div class="chat-messages">
       <div
@@ -37,7 +45,15 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
 import { io, Socket } from 'socket.io-client';
-
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface ChatMessage {
   text: string;
