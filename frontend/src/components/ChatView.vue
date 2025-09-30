@@ -54,6 +54,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import AppSidebar from '@/components/AppSidebar.vue'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 
 interface ChatMessage {
   text: string;
