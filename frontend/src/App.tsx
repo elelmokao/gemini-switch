@@ -1,11 +1,10 @@
 import { ThemeProvider } from "./components/theme-provider"
-import { ChatBasic } from "./components/chat-container"
-
+import { ChatContent } from "./components/chat-content"
 
 function App() {
   return (
     <ThemeProvider>
-      <ChatBasic></ChatBasic>
+      <ChatContent />
     </ThemeProvider>
   )
 }
