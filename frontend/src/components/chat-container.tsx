@@ -11,6 +11,7 @@ import {
   MessageContent,
 } from "@/components/ui/message"
 import { Button } from "@/components/ui/button"
+import { PromptInputBasic } from "@/components/chat-input"
 import { useEffect, useRef, useState } from "react"
 
 export function ChatBasic() {
@@ -91,15 +92,8 @@ export function ChatBasic() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b p-3">
-        <div />
-        <Button size="sm" onClick={streamResponse} disabled={isStreaming}>
-          {isStreaming ? "Streaming..." : "Show Streaming"}
-        </Button>
-      </div>
-
-      <ChatContainerRoot className="flex-1">
-        <ChatContainerContent className="space-y-4 p-4">
+      <ChatContainerRoot className="flex-1 flex flex-col">
+        <ChatContainerContent className="space-y-4 p-4 flex-1 overflow-y-auto">
           {messages.map((message) => {
             const isAssistant = message.role === "assistant"
 
@@ -137,6 +131,9 @@ export function ChatBasic() {
             )
           })}
         </ChatContainerContent>
+        <div className="p-4 border-t bg-background">
+          <PromptInputBasic />
+        </div>
       </ChatContainerRoot>
     </div>
   )
