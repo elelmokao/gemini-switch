@@ -1,16 +1,25 @@
 import { Button } from "@/components/ui/button"
-import {
-  Sidebar,
+import { Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
+  SidebarFooter,
 } from "@/components/ui/sidebar"
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
+import {
+  Bot,
+  KeyRound,
   PlusIcon,
   Search,
+  Settings,
 } from "lucide-react"
 const conversationHistory = [
   {
@@ -135,6 +144,18 @@ export function ChatSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
+      <SidebarFooter className="p-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">Menu</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem><Bot />Persona Management</DropdownMenuItem>
+            <DropdownMenuItem><KeyRound />API Management</DropdownMenuItem>
+            <DropdownMenuItem><Settings />Setting</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarFooter>
     </Sidebar>
   )
 }
