@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Test</title>
+</head>
+<body>
+    <h1>Socket.IO Test Page</h1>
+    <button id="sendTest">Send 'test' Event</button>
+    <button id="sendChat">Send 'chat' Event</button>
+    <div id="logs"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const log = (message) => {
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML += `<p>${new Date().toLocaleTimeString()}: ${message}</p>`;
+        };
+
+        // 務必使用 transporters: ['websocket'] 來匹配我們的後端設定
+        const socket = io('http://localhost:3000', {
+            transports: ['websocket'],
+        });
+
+        // --- 監聽來自伺服器的事件 ---
+        socket.on('connect', () => {
+            log('✅ Connected to server! Socket ID: ' + socket.id);
+        });
+
+        socket.on('disconnect', (reason) => {
+            log('❌ Disconnected from server. Reason: ' + reason);
+        });
+
+        socket.on('test_response', (data) => {
+            log('📬 Received test_response: ' + JSON.stringify(data));
+        });
+
+        socket.on('new_chunk', (data) => {
+            log('📬 Received new_chunk: ' + data.text);
+        });
+
+        socket.on('stream_end', () => {
+            log('🏁 Stream ended.');
+        });
+        
+        socket.on('stream_error', (data) => {
+            log('🔥 Stream error: ' + JSON.stringify(data));
+        });
+
+
+        // --- 按鈕點擊事件 ---
+        document.getElementById('sendTest').onclick = () => {
+            const payload = { message: 'Hello from browser' };
+            log("🚀 Sending 'test' event with payload: " + JSON.stringify(payload));
+            socket.emit('test', payload);
+        };
+
+        document.getElementById('sendChat').onclick = () => {
+            const payload = { prompt: '你好，請介紹一下自己' };
+            log("🚀 Sending 'chat' event with payload: " + JSON.stringify(payload));
+            socket.emit('chat', payload);
+        };
+
+    </script>
+</body>
+</html>
