@@ -7,8 +7,6 @@ import Layout from './layout';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Layout>
-      <App />
-    </Layout>
+    <App />
   </StrictMode>,
 )

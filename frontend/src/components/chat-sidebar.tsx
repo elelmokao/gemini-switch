@@ -15,6 +15,7 @@ import { DropdownMenu,
 } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { ApiManageCard } from "./api-manage-card"
 import {
   Bot,
@@ -111,6 +112,7 @@ const conversationHistory = [
 
 export function ChatSidebar() {
   const [openApiDialog, setOpenApiDialog] = useState(false);
+  const navigate = useNavigate();
   return (
     <Sidebar>
       <SidebarHeader className="flex flex-row items-center justify-between gap-2 px-2 py-4">
@@ -153,7 +155,9 @@ export function ChatSidebar() {
             <Button variant="outline">Menu</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
-            <DropdownMenuItem><Bot />Persona Management</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/personas")}>
+              <Bot />Persona Management
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setOpenApiDialog(true)}><KeyRound />API Management</DropdownMenuItem>
             <DropdownMenuItem><Settings />Setting</DropdownMenuItem>
           </DropdownMenuContent>
