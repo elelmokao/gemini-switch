@@ -5,15 +5,17 @@ import {
 } from "@/components/ui/sidebar"
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider>
-      <ChatSidebar />
-      <SidebarInset>
-        <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
-          <main style={{ flex: 1, height: "100vh" }}>
-            {children}
-          </main>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="flex w-screen h-screen">
+      <SidebarProvider>
+        <ChatSidebar />
+        <SidebarInset>
+          <div style={{ display: "flex", height: "100vh" }}>
+            <main className="flex-1 min-w-0">
+              {children}
+            </main>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </div>
   )
 }
