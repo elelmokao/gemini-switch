@@ -8,12 +8,14 @@ import { Sidebar,
   SidebarMenuButton,
   SidebarFooter,
 } from "@/components/ui/sidebar"
-import {
-  DropdownMenu,
+import { DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { useState } from "react"
+import { ApiManageCard } from "./api-manage-card"
 import {
   Bot,
   KeyRound,
@@ -108,13 +110,14 @@ const conversationHistory = [
 
 
 export function ChatSidebar() {
+  const [openApiDialog, setOpenApiDialog] = useState(false);
   return (
     <Sidebar>
       <SidebarHeader className="flex flex-row items-center justify-between gap-2 px-2 py-4">
         <div className="flex flex-row items-center gap-2 px-2">
           <div className="bg-primary/10 size-8 rounded-md"></div>
           <div className="text-md font-base text-primary tracking-tight">
-            zola.chat
+            Gemini Switch
           </div>
         </div>
         <Button variant="ghost" className="size-8">
@@ -151,10 +154,19 @@ export function ChatSidebar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem><Bot />Persona Management</DropdownMenuItem>
-            <DropdownMenuItem><KeyRound />API Management</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setOpenApiDialog(true)}><KeyRound />API Management</DropdownMenuItem>
             <DropdownMenuItem><Settings />Setting</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Dialog open={openApiDialog} onOpenChange={setOpenApiDialog}>
+          <DialogContent className="max-w-lg w-full">
+            <DialogTitle>API Key Management</DialogTitle>
+            <DialogDescription>
+              Add, view, or remove your API keys below.
+            </DialogDescription>
+            <ApiManageCard />
+          </DialogContent>
+        </Dialog>
       </SidebarFooter>
     </Sidebar>
   )
