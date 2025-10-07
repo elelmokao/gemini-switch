@@ -33,6 +33,7 @@ import {
 } from "lucide-react"
 import { useRef, useState } from "react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 // Initial chat messages
 const initialMessages = [
   {
@@ -97,6 +98,17 @@ export function ChatContent() {
       <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <div className="text-foreground">Project roadmap discussion</div>
+        <div className="ml-auto">
+          <Select>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="API KEY" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="API1">API1</SelectItem>
+              <SelectItem value="API2">API2</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </header>
 
       <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto">
