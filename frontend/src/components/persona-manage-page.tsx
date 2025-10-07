@@ -1,9 +1,12 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function PersonaManagePage() {
     const [personas, setPersonas] = useState<{
@@ -21,6 +24,33 @@ export default function PersonaManagePage() {
         model_used: "Gemini-2.0-flash",
         api_key_id: ""
     });
+
+
+    const roles = [
+        {
+            name: "Note-Taking Assistant",
+            description: "Handles customer queries and support.",
+            system_prompt: "You are a helpful customer support agent.",
+            model_used: "Gemini-2.0-flash",
+            api_key_id: "default-support"
+        },
+        {
+            name: "Content Writer",
+            description: "Creates engaging blog posts.",
+            system_prompt: "You are a creative content writer.",
+            model_used: "Gemini-2.0-pro",
+            api_key_id: "default-writer"
+        },
+        {
+            name: "Code Assistant",
+            description: "Helps with programming questions.",
+            system_prompt: "You are an expert programming assistant.",
+            model_used: "Gemini-2.5-flash",
+            api_key_id: "default-coder"
+        }
+    ];
+
+    const [roleDialogIdx, setRoleDialogIdx] = useState<number | null>(null);
 
     const handleAdd = () => {
         if (!newPersona.name.trim() || !newPersona.system_prompt.trim() || !newPersona.model_used.trim() || !newPersona.api_key_id.trim()) return;
@@ -49,9 +79,55 @@ export default function PersonaManagePage() {
                     <CardTitle>Add Persona</CardTitle>
                 </CardHeader>
                 <CardContent>
+                    {/* Default Persona Options: Each role as a Button, Dialog shows info */}
+                    <div className="mb-4">
+                        <div className="font-semibold mb-2">Quick Fill Default Personas:</div>
+                        <div className="flex flex-wrap gap-2">
+                            {roles.map((persona, idx) => (
+                                <Dialog key={idx} open={roleDialogIdx === idx} onOpenChange={open => setRoleDialogIdx(open ? idx : null)}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" size="sm">{persona.name}</Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-lg">
+                                        <DialogHeader>
+                                            <DialogTitle>{persona.name}</DialogTitle>
+                                        </DialogHeader>
+                                        <div className="mb-2 text-sm text-muted-foreground">{persona.description}</div>
+
+                                        <div className="grid gap-4">
+                                            <div className="grid gap-3">
+                                                <Label htmlFor="name-1">System Prompt</Label>
+                                                <div className="p-2 bg-muted rounded font-mono">{persona.system_prompt}</div>
+                                            </div>
+                                            <div className="grid gap-3">
+                                                <Label htmlFor="username-1">Model</Label>
+                                                <div className="p-2 bg-muted rounded">{persona.model_used}</div>
+                                            </div>
+                                            <div className="grid gap-3">
+                                                <Label htmlFor="username-1">API Key ID</Label>
+                                                <div className="p-2 bg-muted rounded font-mono">{persona.api_key_id}</div>
+                                            </div>
+                                        </div>
+                                        <DialogFooter className="flex gap-2">
+                                            <Button
+                                                onClick={() => {
+                                                    setNewPersona({ ...persona });
+                                                    setRoleDialogIdx(null);
+                                                }}
+                                            >Apply</Button>
+                                            <Button variant="outline" onClick={() => setRoleDialogIdx(null)}>Cancel</Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Custom Add Persona Form */}
+                    <div className="font-semibold mb-2">Add Custom Persona:</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <Input
-                            placeholder="Persona Name"
+                            placeholder="Persona Role"
                             value={newPersona.name}
                             onChange={e => setNewPersona({ ...newPersona, name: e.target.value })}
                         />
