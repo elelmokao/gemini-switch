@@ -14,7 +14,7 @@ import { DropdownMenu,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { ApiManageCard } from "./api-manage-card"
 import {
@@ -24,95 +24,67 @@ import {
   Search,
   Settings,
 } from "lucide-react"
-const conversationHistory = [
-  {
-    period: "Today",
-    conversations: [
-      {
-        id: "t1",
-        title: "Project roadmap discussion",
-        lastMessage:
-          "Let's prioritize the authentication features for the next sprint.",
-        timestamp: new Date().setHours(new Date().getHours() - 2),
-      },
-      {
-        id: "t2",
-        title: "API Documentation Review",
-        lastMessage:
-          "The endpoint descriptions need more detail about rate limiting.",
-        timestamp: new Date().setHours(new Date().getHours() - 5),
-      },
-      {
-        id: "t3",
-        title: "Frontend Bug Analysis",
-        lastMessage:
-          "I found the issue - we need to handle the null state in the user profile component.",
-        timestamp: new Date().setHours(new Date().getHours() - 8),
-      },
-    ],
-  },
-  {
-    period: "Yesterday",
-    conversations: [
-      {
-        id: "y1",
-        title: "Database Schema Design",
-        lastMessage:
-          "Let's add indexes to improve query performance on these tables.",
-        timestamp: new Date().setDate(new Date().getDate() - 1),
-      },
-      {
-        id: "y2",
-        title: "Performance Optimization",
-        lastMessage:
-          "The lazy loading implementation reduced initial load time by 40%.",
-        timestamp: new Date().setDate(new Date().getDate() - 1),
-      },
-    ],
-  },
-  {
-    period: "Last 7 days",
-    conversations: [
-      {
-        id: "w1",
-        title: "Authentication Flow",
-        lastMessage: "We should implement the OAuth2 flow with refresh tokens.",
-        timestamp: new Date().setDate(new Date().getDate() - 3),
-      },
-      {
-        id: "w2",
-        title: "Component Library",
-        lastMessage:
-          "These new UI components follow the design system guidelines perfectly.",
-        timestamp: new Date().setDate(new Date().getDate() - 5),
-      },
-      {
-        id: "w3",
-        title: "UI/UX Feedback",
-        lastMessage:
-          "The navigation redesign received positive feedback from the test group.",
-        timestamp: new Date().setDate(new Date().getDate() - 6),
-      },
-    ],
-  },
-  {
-    period: "Last month",
-    conversations: [
-      {
-        id: "m1",
-        title: "Initial Project Setup",
-        lastMessage:
-          "All the development environments are now configured consistently.",
-        timestamp: new Date().setDate(new Date().getDate() - 15),
-      },
-    ],
-  },
-]
+import { useChatroomContext } from "../contexts/useChatroomContext"
+import type { Chatroom } from "../contexts/ChatroomContext"
 
+interface ConversationGroup {
+  period: string
+  conversations: {
+    id: string
+    title: string
+  }[]
+}
+
+// Helper function to group chatrooms by time period
+function groupChatroomsByTime(chatrooms: Chatroom[]): ConversationGroup[] {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+  const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const lastMonth = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const groups: ConversationGroup[] = [
+    { period: "Today", conversations: [] },
+    { period: "Yesterday", conversations: [] },
+    { period: "Last 7 days", conversations: [] },
+    { period: "Last month", conversations: [] },
+  ]
+
+  chatrooms.forEach((chatroom) => {
+    const createdAt = new Date(chatroom.created_at)
+    
+    if (createdAt >= today) {
+      groups[0].conversations.push({ id: chatroom.id, title: chatroom.title })
+    } else if (createdAt >= yesterday) {
+      groups[1].conversations.push({ id: chatroom.id, title: chatroom.title })
+    } else if (createdAt >= lastWeek) {
+      groups[2].conversations.push({ id: chatroom.id, title: chatroom.title })
+    } else if (createdAt >= lastMonth) {
+      groups[3].conversations.push({ id: chatroom.id, title: chatroom.title })
+    }
+  })
+
+  // Filter out empty groups
+  return groups.filter(group => group.conversations.length > 0)
+}
 
 export function ChatSidebar() {
-  const [openApiDialog, setOpenApiDialog] = useState(false);
-  const navigate = useNavigate();
+  const [openApiDialog, setOpenApiDialog] = useState(false)
+  const [conversationHistory, setConversationHistory] = useState<ConversationGroup[]>([])
+  const navigate = useNavigate()
+  
+  // Use the chatroom context
+  const { chatrooms, refreshChatrooms, isLoading, error } = useChatroomContext()
+
+  // Update conversation history when chatrooms change
+  useEffect(() => {
+    setConversationHistory(groupChatroomsByTime(chatrooms))
+  }, [chatrooms])
+
+  // Fetch chatrooms on component mount
+  useEffect(() => {
+    refreshChatrooms()
+  }, [refreshChatrooms])
   return (
     <Sidebar>
       <SidebarHeader className="flex flex-row items-center justify-between gap-2 px-2 py-4">
@@ -131,23 +103,58 @@ export function ChatSidebar() {
           <Button
             variant="outline"
             className="mb-4 flex w-full items-center gap-2"
+            onClick={() => navigate("/")}
           >
             <PlusIcon className="size-4" />
             <span>New Chat</span>
           </Button>
         </div>
-        {conversationHistory.map((group) => (
-          <SidebarGroup key={group.period}>
-            <SidebarGroupLabel>{group.period}</SidebarGroupLabel>
-            <SidebarMenu>
-              {group.conversations.map((conversation) => (
-                <SidebarMenuButton key={conversation.id}>
-                  <span>{conversation.title}</span>
-                </SidebarMenuButton>
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
-        ))}
+        
+        {isLoading ? (
+          <div className="px-4">
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-600">Loading conversations...</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="px-4">
+            <div className="text-center py-8">
+              <p className="text-sm text-red-600">{error}</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={refreshChatrooms}
+                className="mt-2"
+              >
+                Try Again
+              </Button>
+            </div>
+          </div>
+        ) : conversationHistory.length === 0 ? (
+          <div className="px-4">
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-600">No conversations yet</p>
+              <p className="text-xs text-gray-500 mt-1">Start a new chat to see it here</p>
+            </div>
+          </div>
+        ) : (
+          conversationHistory.map((group) => (
+            <SidebarGroup key={group.period}>
+              <SidebarGroupLabel>{group.period}</SidebarGroupLabel>
+              <SidebarMenu>
+                {group.conversations.map((conversation) => (
+                  <SidebarMenuButton 
+                    key={conversation.id}
+                    onClick={() => navigate(`/${conversation.id}`)}
+                  >
+                    <span className="truncate">{conversation.title}</span>
+                  </SidebarMenuButton>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          ))
+        )}
       </SidebarContent>
       <SidebarFooter className="p-4">
         <DropdownMenu>

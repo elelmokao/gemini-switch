@@ -9,7 +9,9 @@ describe('ChatroomMessagesController', () => {
       controllers: [ChatroomMessagesController],
     }).compile();
 
-    controller = module.get<ChatroomMessagesController>(ChatroomMessagesController);
+    controller = module.get<ChatroomMessagesController>(
+      ChatroomMessagesController,
+    );
   });
 
   it('should be defined', () => {

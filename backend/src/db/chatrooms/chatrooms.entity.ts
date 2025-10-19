@@ -6,8 +6,6 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
-import { ManyToOne, JoinColumn } from 'typeorm';
-import { Personas } from '../personas/personas.entity';
 import { ChatroomEnrolledPersona } from '../chatroom_enrolled_personas/chatroom_enrolled_personas.entity';
 
 @Entity('chatrooms')
@@ -18,12 +16,11 @@ export class Chatrooms {
   @Column({ type: 'uuid', nullable: true })
   user_id: string;
 
-  @Column({ type: 'varchar', length: 255, default: 'New Chat' })
+  @Column({ type: 'varchar', length: 255 })
   title: string;
 
-  @ManyToOne(() => Personas, { nullable: false })
-  @JoinColumn({ name: 'base_personal_id' })
-  base_persona_id: string;
+  @Column('uuid', { array: true, nullable: true })
+  persona_ids: string[];
 
   @CreateDateColumn()
   created_at: Date;

@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Post } from '@nestjs/common';
+import { Controller, Delete, Get, Post, Body } from '@nestjs/common';
 import { ChatroomsService } from './chatrooms.service';
 import type { CreateChatroomsDto } from './dto/create_chatrooms.dto';
 
@@ -7,7 +7,7 @@ export class ChatroomsController {
   constructor(private readonly chatroomsService: ChatroomsService) {}
 
   @Post()
-  create(createChatroomsDto: CreateChatroomsDto) {
+  create(@Body() createChatroomsDto: CreateChatroomsDto) {
     return this.chatroomsService.create(createChatroomsDto);
   }
 

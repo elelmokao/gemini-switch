@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Param } from '@nestjs/common';
 import { ChatroomMessagesService } from './chatroom_messages.service';
 import type { ChatroomMessagesDto } from './dto/create_chatroom_messages.dto';
 
@@ -14,7 +14,7 @@ export class ChatroomMessagesController {
   }
 
   @Get(':chatroomId')
-  getMessagesByChatroomId(chatroomId: string) {
+  getMessagesByChatroomId(@Param('chatroomId') chatroomId: string) {
     return this.chatroomMessagesService.getMessagesByChatroomId(chatroomId);
   }
 }

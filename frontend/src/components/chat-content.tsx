@@ -31,73 +31,360 @@ import {
   ThumbsUp,
   Trash,
 } from "lucide-react"
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-// Initial chat messages
-const initialMessages = [
-  {
-    id: 1,
-    role: "user",
-    content: "Hello! Can you help me with a coding question?",
-  },
-  {
-    id: 2,
-    role: "assistant",
-    content:
-      "Of course! I'd be happy to help with your coding question. What would you like to know?",
-  },
-  {
-    id: 3,
-    role: "user",
-    content: "How do I create a responsive layout with CSS Grid?",
-  },
-  {
-    id: 4,
-    role: "assistant",
-    content:
-      "Creating a responsive layout with CSS Grid is straightforward. Here's a basic example:\n\n```css\n.container {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));\n  gap: 1rem;\n}\n```\n\nThis creates a grid where:\n- Columns automatically fit as many as possible\n- Each column is at least 250px wide\n- Columns expand to fill available space\n- There's a 1rem gap between items\n\nWould you like me to explain more about how this works?",
-  },
-]
+import { useChatroomContext } from "../contexts/useChatroomContext"
+
+// Interfaces for chatroom data
+interface Chatroom {
+  id: string
+  title: string
+  base_persona_id: string
+  created_at: string
+  updated_at: string
+}
+
+// Message interface for better type safety
+interface ChatMessage {
+  id: number | string
+  role: "user" | "assistant"
+  content: string
+}
+
+// Backend message response interface
+interface BackendMessage {
+  id: string
+  chatroom_id: string
+  role: string
+  content: string
+  persona_id: string | null
+  created_at: string
+}
+
 export function ChatContent() {
+  const { chatroomId } = useParams<{ chatroomId: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [prompt, setPrompt] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [chatMessages, setChatMessages] = useState(initialMessages)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatroom, setChatroom] = useState<Chatroom | null>(null)
+  const [isLoadingChatroom, setIsLoadingChatroom] = useState(!!chatroomId) // Only loading if we have a chatroomId
+  const [error, setError] = useState<string | null>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  
+  // Get the refresh function from context
+  const { refreshChatrooms } = useChatroomContext()
 
-  const handleSubmit = () => {
-    if (!prompt.trim()) return
-
-    setPrompt("")
-    setIsLoading(true)
-
-    // Add user message immediately
-    const newUserMessage = {
-      id: chatMessages.length + 1,
-      role: "user",
-      content: prompt.trim(),
+  // Fetch chatroom data when component mounts or chatroomId changes
+  useEffect(() => {
+    // If no chatroom ID, we're in the empty state - no need to fetch
+    if (!chatroomId) {
+      setIsLoadingChatroom(false)
+      setChatroom(null)
+      setChatMessages([])
+      setError(null)
+      return
     }
 
-    setChatMessages([...chatMessages, newUserMessage])
+    const fetchChatroom = async () => {
+      try {
+        setIsLoadingChatroom(true)
+        const response = await fetch(`http://localhost:3000/chatrooms/${chatroomId}`)
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch chatroom: ${response.statusText}`)
+        }
+        
+        const chatroomData: Chatroom = await response.json()
+        console.log('Fetched chatroom:', chatroomData)
+        setChatroom(chatroomData)
+        
+        // Load existing messages from database
+        try {
+          const messagesResponse = await fetch(`http://localhost:3000/chatroom-messages/${chatroomId}`)
+          if (messagesResponse.ok) {
+            const messages = await messagesResponse.json()
+            // Sort messages by creation time to ensure proper order
+            const sortedMessages = messages.sort((a: BackendMessage, b: BackendMessage) => 
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
+            const formattedMessages: ChatMessage[] = sortedMessages.map((msg: BackendMessage, index: number) => ({
+              id: msg.id || index + 1,
+              role: msg.role as "user" | "assistant",
+              content: msg.content,
+            }))
+            setChatMessages(formattedMessages)
+            
+            // Check if we have an initial message from navigation state (for newly created chatrooms)
+            // and if there's only one message (the user message we just created)
+            const initialMessage = (location.state && typeof location.state === 'object' && 'initialMessage' in location.state 
+              ? (location.state as { initialMessage: string }).initialMessage 
+              : null) || sessionStorage.getItem(`initialMessage_${chatroomId}`)
+              
+            if (initialMessage && formattedMessages.length === 1 && formattedMessages[0].role === 'user') {
+              // Clear the sessionStorage item since we're using it
+              sessionStorage.removeItem(`initialMessage_${chatroomId}`)
+              
+              // This is a newly created chatroom with only the initial user message
+              // Generate AI response
+              setTimeout(async () => {
+                const assistantContent = `This is a response to: "${initialMessage}"`
+                
+                try {
+                  // Save assistant response to database
+                  const assistantMessageResponse = await fetch('http://localhost:3000/chatroom-messages', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      chatroom_id: chatroomId,
+                      role: 'assistant',
+                      content: assistantContent,
+                      persona_id: null,
+                    }),
+                  })
 
-    // Simulate API response
-    setTimeout(() => {
-      const assistantResponse = {
-        id: chatMessages.length + 2,
-        role: "assistant",
-        content: `This is a response to: "${prompt.trim()}"`,
+                  if (assistantMessageResponse.ok) {
+                    const savedAssistantMessage = await assistantMessageResponse.json()
+                    const assistantResponse: ChatMessage = {
+                      id: savedAssistantMessage.id,
+                      role: "assistant" as const,
+                      content: assistantContent,
+                    }
+                    setChatMessages(prev => [...prev, assistantResponse])
+                  }
+                } catch (err) {
+                  console.error('Error saving initial assistant message:', err)
+                }
+              }, 1500)
+            }
+          } else {
+            // If no messages found, start with empty array
+            setChatMessages([])
+          }
+        } catch (err) {
+          console.error('Error loading messages:', err)
+          setChatMessages([])
+        }
+        
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching chatroom:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load chatroom')
+      } finally {
+        setIsLoadingChatroom(false)
+      }
+    }
+
+    fetchChatroom()
+  }, [chatroomId, location.state])
+
+  const handleSubmit = async () => {
+    if (!prompt.trim()) return
+
+    const userMessage = prompt.trim()
+    setPrompt("")
+    setIsLoading(true)
+    // If we don't have a chatroom ID, create a new chatroom first
+    if (!chatroomId) {
+      try {
+        // Step 1: Create the chatroom
+        const title = userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '') // Use first 50 chars as title
+        const chatroomResponse = await fetch('http://localhost:3000/chatrooms', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: title,
+            persona_ids: [],
+          }),
+        })
+
+        if (!chatroomResponse.ok) {
+          throw new Error(`Failed to create chatroom: ${chatroomResponse.statusText}`)
+        }
+
+        const newChatroom = await chatroomResponse.json()
+        console.log('Created chatroom:', newChatroom)
+
+        // Step 2: Create the user message in the chatroom
+        const messageResponse = await fetch('http://localhost:3000/chatroom-messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            chatroom_id: newChatroom.id,
+            role: 'user',
+            content: userMessage,
+            persona_id: null,
+          }),
+        })
+
+        if (!messageResponse.ok) {
+          throw new Error(`Failed to create message: ${messageResponse.statusText}`)
+        }
+
+        // Refresh the chatroom list in sidebar
+        await refreshChatrooms()
+        
+        // Navigate to the new chatroom with the user message as state
+        // Also store in sessionStorage as backup
+        sessionStorage.setItem(`initialMessage_${newChatroom.id}`, userMessage)
+        navigate(`/${newChatroom.id}`, { 
+          replace: true, 
+          state: { initialMessage: userMessage } 
+        })
+        return
+      } catch (err) {
+        console.error('Error creating chatroom or message:', err)
+        setError(err instanceof Error ? err.message : 'Failed to create chatroom')
+        setIsLoading(false)
+        return
+      }
+    }
+
+    // If we have a chatroom ID, proceed with normal message handling
+    try {
+      // Save user message to database
+      const messageResponse = await fetch('http://localhost:3000/chatroom-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatroom_id: chatroomId,
+          role: 'user',
+          content: userMessage,
+          persona_id: null,
+        }),
+      })
+
+      if (!messageResponse.ok) {
+        throw new Error(`Failed to save message: ${messageResponse.statusText}`)
       }
 
-      setChatMessages((prev) => [...prev, assistantResponse])
+      const savedMessage = await messageResponse.json()
+
+      // Add user message to UI immediately
+      const newUserMessage: ChatMessage = {
+        id: savedMessage.id || chatMessages.length + 1,
+        role: "user" as const,
+        content: userMessage,
+      }
+
+      setChatMessages([...chatMessages, newUserMessage])
+
+      // Simulate API response (later this will be replaced with real AI response)
+      setTimeout(async () => {
+        const assistantContent = `This is a response to: "${userMessage}"`
+        
+        try {
+          // Save assistant response to database
+          const assistantMessageResponse = await fetch('http://localhost:3000/chatroom-messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chatroom_id: chatroomId,
+              role: 'assistant',
+              content: assistantContent,
+              persona_id: null,
+            }),
+          })
+
+          if (assistantMessageResponse.ok) {
+            const savedAssistantMessage = await assistantMessageResponse.json()
+            const assistantResponse: ChatMessage = {
+              id: savedAssistantMessage.id,
+              role: "assistant" as const,
+              content: assistantContent,
+            }
+            setChatMessages((prev) => [...prev, assistantResponse])
+          } else {
+            console.error('Failed to save assistant message')
+            // Still show the message in UI even if save failed
+            const assistantResponse: ChatMessage = {
+              id: Date.now(),
+              role: "assistant" as const,
+              content: assistantContent,
+            }
+            setChatMessages((prev) => [...prev, assistantResponse])
+          }
+        } catch (err) {
+          console.error('Error saving assistant message:', err)
+          // Still show the message in UI even if save failed
+          const assistantResponse: ChatMessage = {
+            id: Date.now(),
+            role: "assistant" as const,
+            content: assistantContent,
+          }
+          setChatMessages((prev) => [...prev, assistantResponse])
+        }
+        
+        setIsLoading(false)
+      }, 1500)
+    } catch (err) {
+      console.error('Error saving message:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save message')
       setIsLoading(false)
-    }, 1500)
+      return
+    }
+  }
+
+  // Show loading state while fetching chatroom
+  if (isLoadingChatroom) {
+    return (
+      <main className="flex h-screen flex-col overflow-hidden">
+        <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <div className="text-foreground">Loading chatroom...</div>
+        </header>
+        <div className="flex items-center justify-center flex-1">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading chatroom...</p>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  // Show error state if there was an error fetching chatroom
+  if (error) {
+    return (
+      <main className="flex h-screen flex-col overflow-hidden">
+        <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <div className="text-foreground">Error</div>
+        </header>
+        <div className="flex items-center justify-center flex-1">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-red-600 mb-2">Error</h2>
+            <p className="text-gray-600">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
       <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
-        <div className="text-foreground">Project roadmap discussion</div>
+        <div className="text-foreground">{chatroom?.title || "New Chat"}</div>
         <div className="ml-auto">
           <Select>
             <SelectTrigger className="w-[130px]">
@@ -114,7 +401,19 @@ export function ChatContent() {
       <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto">
         <ChatContainerRoot className="h-full">
           <ChatContainerContent className="space-y-0 px-5 py-12">
-            {chatMessages.map((message, index) => {
+            {chatMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center max-w-md mx-auto">
+                  <h2 className="text-2xl font-semibold text-foreground mb-4">
+                    Welcome to Gemini Switch
+                  </h2>
+                  <p className="text-muted-foreground mb-8">
+                    Start a conversation by typing your message below. I'm here to help with any questions or tasks you have.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              chatMessages.map((message, index) => {
               const isAssistant = message.role === "assistant"
               const isLastMessage = index === chatMessages.length - 1
 
@@ -211,7 +510,8 @@ export function ChatContent() {
                   )}
                 </Message>
               )
-            })}
+              })
+            )}
           </ChatContainerContent>
           <div className="absolute bottom-4 left-1/2 flex w-full max-w-3xl -translate-x-1/2 justify-end px-5">
             <ScrollButton className="shadow-sm" />

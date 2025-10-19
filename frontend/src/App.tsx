@@ -11,6 +11,7 @@ function App() {
         <Layout>
           <Routes>
             <Route path="/" element={<ChatContent />} />
+            <Route path="/:chatroomId" element={<ChatContent />} />
             <Route path="/personas" element={<PersonaManagePage />} />
           </Routes>
         </Layout>
