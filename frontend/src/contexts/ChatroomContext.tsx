@@ -31,7 +31,6 @@ export function ChatroomProvider({ children }: ChatroomProviderProps) {
       }
       
       const chatroomsData: Chatroom[] = await response.json()
-      console.log('Fetched chatrooms:', chatroomsData)
       
       // Sort chatrooms by creation time (newest first)
       const sortedChatrooms = chatroomsData.sort((a, b) => 

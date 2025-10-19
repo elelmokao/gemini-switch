@@ -27,11 +27,12 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  RefreshCw,
   ThumbsDown,
   ThumbsUp,
   Trash,
 } from "lucide-react"
-import { useRef, useState, useEffect } from "react"
+import { useRef, useState, useEffect, useCallback } from "react"
 import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -63,6 +64,16 @@ interface BackendMessage {
   created_at: string
 }
 
+// API Key interface for backend response
+interface ApiKey {
+  id: string
+  user_id: string | null
+  api_key: string
+  description: string | null
+  token_used: number
+  created_at: string
+}
+
 export function ChatContent() {
   const { chatroomId } = useParams<{ chatroomId: string }>()
   const navigate = useNavigate()
@@ -73,10 +84,43 @@ export function ChatContent() {
   const [chatroom, setChatroom] = useState<Chatroom | null>(null)
   const [isLoadingChatroom, setIsLoadingChatroom] = useState(!!chatroomId) // Only loading if we have a chatroomId
   const [error, setError] = useState<string | null>(null)
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
+  const [selectedApiKey, setSelectedApiKey] = useState<string>("")
+  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   
   // Get the refresh function from context
   const { refreshChatrooms } = useChatroomContext()
+
+  // Fetch API keys from backend
+  const fetchApiKeys = useCallback(async () => {
+    try {
+      setIsLoadingApiKeys(true)
+      const response = await fetch('http://localhost:3000/api_keys')
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch API keys: ${response.statusText}`)
+      }
+      
+      const apiKeysData: ApiKey[] = await response.json()
+      setApiKeys(apiKeysData)
+      
+      // Set the first API key as selected by default if available
+      if (apiKeysData.length > 0 && !selectedApiKey) {
+        setSelectedApiKey(apiKeysData[0].api_key)
+      }
+    } catch (err) {
+      console.error('Error fetching API keys:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load API keys')
+    } finally {
+      setIsLoadingApiKeys(false)
+    }
+  }, [selectedApiKey])
+
+  // Fetch API keys when component mounts
+  useEffect(() => {
+    fetchApiKeys()
+  }, []) // Empty dependency array means this runs once when component mounts
 
   // Fetch chatroom data when component mounts or chatroomId changes
   useEffect(() => {
@@ -99,7 +143,6 @@ export function ChatContent() {
         }
         
         const chatroomData: Chatroom = await response.json()
-        console.log('Fetched chatroom:', chatroomData)
         setChatroom(chatroomData)
         
         // Load existing messages from database
@@ -210,7 +253,6 @@ export function ChatContent() {
         }
 
         const newChatroom = await chatroomResponse.json()
-        console.log('Created chatroom:', newChatroom)
 
         // Step 2: Create the user message in the chatroom
         const messageResponse = await fetch('http://localhost:3000/chatroom-messages', {
@@ -385,16 +427,35 @@ export function ChatContent() {
       <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <div className="text-foreground">{chatroom?.title || "New Chat"}</div>
-        <div className="ml-auto">
-          <Select>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue placeholder="API KEY" />
+        <div className="ml-auto flex items-center gap-2">
+          <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder={isLoadingApiKeys ? "Loading..." : "Select API Key"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="API1">API1</SelectItem>
-              <SelectItem value="API2">API2</SelectItem>
+              {isLoadingApiKeys ? (
+                <SelectItem value="loading" disabled>Loading API keys...</SelectItem>
+              ) : apiKeys.length === 0 ? (
+                <SelectItem value="no-api-keys" disabled>No API keys available</SelectItem>
+              ) : (
+                apiKeys.map((apiKey) => (
+                  <SelectItem key={apiKey.id} value={apiKey.api_key}>
+                    {apiKey.description || apiKey.api_key.slice(0, 20) + '...'}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchApiKeys}
+            disabled={isLoadingApiKeys}
+            className="h-10 w-10"
+            title="Reload API keys"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoadingApiKeys ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       </header>
 

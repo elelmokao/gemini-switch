@@ -39,7 +39,6 @@ export function ApiManageCard() {
 
 	const handleAdd = async () => {
 		const trimmedKey = newKey.trim();
-		console.log("test");
 		if (!trimmedKey || apiKeys.some(k => k.api_key === trimmedKey)) return;
 		setLoading(true);
 		try {
