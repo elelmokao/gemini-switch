@@ -37,6 +37,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useChatroomContext } from "../contexts/useChatroomContext"
+import { io, Socket } from "socket.io-client"
 
 // Interfaces for chatroom data
 interface Chatroom {
@@ -75,6 +76,7 @@ interface ApiKey {
 }
 
 export function ChatContent() {
+  const assistantContentRef = useRef("")
   const { chatroomId } = useParams<{ chatroomId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -82,12 +84,20 @@ export function ChatContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatroom, setChatroom] = useState<Chatroom | null>(null)
-  const [isLoadingChatroom, setIsLoadingChatroom] = useState(!!chatroomId) // Only loading if we have a chatroomId
+  const [isLoadingChatroom, setIsLoadingChatroom] = useState(!!chatroomId)
   const [error, setError] = useState<string | null>(null)
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
   const [selectedApiKey, setSelectedApiKey] = useState<string>("")
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false)
+  const [socket, setSocket] = useState<Socket | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const chatroomIdRef = useRef<string | undefined>(chatroomId)
+  
+  // Update chatroomId ref when it changes
+  useEffect(() => {
+    chatroomIdRef.current = chatroomId
+  }, [chatroomId])
   
   // Get the refresh function from context
   const { refreshChatrooms } = useChatroomContext()
@@ -120,7 +130,108 @@ export function ChatContent() {
   // Fetch API keys when component mounts
   useEffect(() => {
     fetchApiKeys()
-  }, []) // Empty dependency array means this runs once when component mounts
+  }, [fetchApiKeys]) // Add fetchApiKeys as dependency
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    console.log('Initializing WebSocket connection...')
+    const socketInstance = io('http://localhost:3000', {
+      transports: ['websocket'],
+    })
+    
+    socketInstance.on('connect', () => {
+      console.log('Connected to server. Socket ID:', socketInstance.id)
+      setIsConnecting(false)
+    })
+
+    socketInstance.on('disconnect', (reason) => {
+      console.log('Disconnected from server. Reason:', reason)
+    })
+
+    socketInstance.on('error', (error) => {
+      console.error('WebSocket error:', error)
+      setIsConnecting(false)
+    })
+
+    // Handle AI response stream - simplified like Vue version
+    socketInstance.on('new_chunk', (data: { text: string }) => {
+      console.log('Received chunk:', data.text?.substring(0, 20) + '...', 'Length:', data.text?.length)
+      
+      // 累積 chunk 到 ref
+      assistantContentRef.current += data.text
+      console.log('[assistantContentRef] Received chunk, current content:', assistantContentRef.current)
+    })
+
+    socketInstance.on('stream_end', async () => {
+      console.log('[assistantContentRef] Stream ended')
+      setIsLoading(false)
+      const content = assistantContentRef.current.trim()
+      assistantContentRef.current = ""
+      if (!content) return
+      const currentChatroomId = chatroomIdRef.current
+      const newId = `temp-${Date.now()}`
+      // 1. push 一則完整 assistant 訊息到 chatMessages
+      setChatMessages(prev => {
+        const newMessages = [...prev, { id: newId, role: 'assistant', content }]
+        console.log('[assistantContentRef] Push assistant message:', { id: newId, content })
+        return newMessages
+      })
+      // 2. 儲存到資料庫
+      if (currentChatroomId) {
+        fetch('http://localhost:3000/chatroom-messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            chatroom_id: currentChatroomId,
+            role: 'assistant',
+            content,
+            persona_id: null,
+          }),
+        })
+          .then(response => {
+            if (response.ok) {
+              return response.json()
+            }
+            throw new Error('Failed to save assistant message')
+          })
+          .then(savedMessage => {
+            console.log('[assistantContentRef] Assistant message saved to database:', savedMessage.id)
+            setChatMessages(current => {
+              const updated = [...current]
+              const messageIndex = updated.findIndex(msg =>
+                msg.role === 'assistant' && msg.id === newId
+              )
+              if (messageIndex >= 0) {
+                updated[messageIndex] = {
+                  ...updated[messageIndex],
+                  id: savedMessage.id
+                }
+              }
+              return updated
+            })
+          })
+          .catch(error => {
+            console.error('[assistantContentRef] Error saving assistant message:', error)
+          })
+      }
+    })
+
+    socketInstance.on('stream_error', (data: { message: string }) => {
+      console.error('Stream error:', data.message)
+      setError(data.message || 'An error occurred while processing the message')
+      setIsLoading(false)
+    })
+
+    setSocket(socketInstance)
+
+    // Cleanup on unmount
+    return () => {
+      console.log('Cleaning up WebSocket connection...')
+      socketInstance.disconnect()
+    }
+  }, []) // Keep empty dependency array to run only once
 
   // Fetch chatroom data when component mounts or chatroomId changes
   useEffect(() => {
@@ -172,38 +283,35 @@ export function ChatContent() {
               sessionStorage.removeItem(`initialMessage_${chatroomId}`)
               
               // This is a newly created chatroom with only the initial user message
-              // Generate AI response
-              setTimeout(async () => {
-                const assistantContent = `This is a response to: "${initialMessage}"`
-                
-                try {
-                  // Save assistant response to database
-                  const assistantMessageResponse = await fetch('http://localhost:3000/chatroom-messages', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      chatroom_id: chatroomId,
-                      role: 'assistant',
-                      content: assistantContent,
-                      persona_id: null,
-                    }),
-                  })
-
-                  if (assistantMessageResponse.ok) {
-                    const savedAssistantMessage = await assistantMessageResponse.json()
-                    const assistantResponse: ChatMessage = {
-                      id: savedAssistantMessage.id,
-                      role: "assistant" as const,
-                      content: assistantContent,
-                    }
-                    setChatMessages(prev => [...prev, assistantResponse])
+              // Generate AI response via WebSocket like Vue version
+              setTimeout(() => {
+                if (socket && socket.connected && selectedApiKey) {
+                  setIsLoading(true)
+                  
+                  // Build history from existing messages
+                  const historyForApi = formattedMessages
+                    .filter(msg => msg.content && msg.content.trim() !== '')
+                    .map(msg => ({
+                      role: msg.role === 'user' ? 'user' : 'model',
+                      parts: [{ text: msg.content }],
+                    }))
+                  
+                  // Don't add empty assistant message here - let new_chunk handle it
+                  
+                  const payload = {
+                    prompt: initialMessage,
+                    history: historyForApi,
+                    model: 'gemini-1.5-flash',
+                    api_key: selectedApiKey
                   }
-                } catch (err) {
-                  console.error('Error saving initial assistant message:', err)
+                  console.log('Sending initial message via WebSocket:', payload)
+                  socket.emit('chat', payload)
+                } else {
+                  console.error('WebSocket not connected or no API key selected for initial message')
+                  console.log('Socket connected:', socket?.connected)
+                  console.log('Selected API key:', selectedApiKey)
                 }
-              }, 1500)
+              }, 500) // Small delay to ensure socket is ready
             }
           } else {
             // If no messages found, start with empty array
@@ -224,7 +332,7 @@ export function ChatContent() {
     }
 
     fetchChatroom()
-  }, [chatroomId, location.state])
+  }, [chatroomId, location.state, socket, selectedApiKey])
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return
@@ -322,56 +430,34 @@ export function ChatContent() {
 
       setChatMessages([...chatMessages, newUserMessage])
 
-      // Simulate API response (later this will be replaced with real AI response)
-      setTimeout(async () => {
-        const assistantContent = `This is a response to: "${userMessage}"`
+      // Send message to AI via WebSocket if socket is connected
+      if (socket && socket.connected && selectedApiKey) {
+        // Build conversation history like Vue version
+        const historyForApi = chatMessages
+          .filter(msg => msg.content && msg.content.trim() !== '')
+          .map(msg => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.content }],
+          }))
         
-        try {
-          // Save assistant response to database
-          const assistantMessageResponse = await fetch('http://localhost:3000/chatroom-messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chatroom_id: chatroomId,
-              role: 'assistant',
-              content: assistantContent,
-              persona_id: null,
-            }),
-          })
-
-          if (assistantMessageResponse.ok) {
-            const savedAssistantMessage = await assistantMessageResponse.json()
-            const assistantResponse: ChatMessage = {
-              id: savedAssistantMessage.id,
-              role: "assistant" as const,
-              content: assistantContent,
-            }
-            setChatMessages((prev) => [...prev, assistantResponse])
-          } else {
-            console.error('Failed to save assistant message')
-            // Still show the message in UI even if save failed
-            const assistantResponse: ChatMessage = {
-              id: Date.now(),
-              role: "assistant" as const,
-              content: assistantContent,
-            }
-            setChatMessages((prev) => [...prev, assistantResponse])
-          }
-        } catch (err) {
-          console.error('Error saving assistant message:', err)
-          // Still show the message in UI even if save failed
-          const assistantResponse: ChatMessage = {
-            id: Date.now(),
-            role: "assistant" as const,
-            content: assistantContent,
-          }
-          setChatMessages((prev) => [...prev, assistantResponse])
+        // Don't add empty assistant message here - let new_chunk handle it
+        
+        const payload = {
+          prompt: userMessage,
+          history: historyForApi,
+          model: 'gemini-1.5-flash',
+          api_key: selectedApiKey
         }
-        
+        console.log('Sending message via WebSocket:', payload)
+        socket.emit('chat', payload)
+      } else {
+        console.error('WebSocket not connected or no API key selected')
+        console.log('Socket connected:', socket?.connected)
+        console.log('Selected API key:', selectedApiKey)
         setIsLoading(false)
-      }, 1500)
+        setError('WebSocket not connected or no API key selected')
+        return
+      }
     } catch (err) {
       console.error('Error saving message:', err)
       setError(err instanceof Error ? err.message : 'Failed to save message')
@@ -427,6 +513,11 @@ export function ChatContent() {
       <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <div className="text-foreground">{chatroom?.title || "New Chat"}</div>
+        {(isConnecting || !socket?.connected) && (
+          <div className="text-sm text-muted-foreground">
+            {isConnecting ? "Connecting..." : "Disconnected"}
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
             <SelectTrigger className="w-[180px]">
@@ -637,9 +728,15 @@ export function ChatContent() {
 
                   <Button
                     size="icon"
-                    disabled={!prompt.trim() || isLoading}
+                    disabled={!prompt.trim() || isLoading || !socket?.connected || !selectedApiKey}
                     onClick={handleSubmit}
                     className="size-9 rounded-full"
+                    title={
+                      !socket?.connected ? "WebSocket disconnected" :
+                      !selectedApiKey ? "Please select an API key" :
+                      !prompt.trim() ? "Enter a message" :
+                      isLoading ? "Sending..." : "Send message"
+                    }
                   >
                     {!isLoading ? (
                       <ArrowUp size={18} />

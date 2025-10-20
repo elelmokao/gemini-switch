@@ -8,4 +8,5 @@ export interface ChatPayload {
   prompt: string;
   history: Content[];
   model: string;
+  api_key?: string;
 }

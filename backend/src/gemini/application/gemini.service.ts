@@ -8,14 +8,17 @@ import { ALLOWED_MODELS } from './gemini.constant';
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private genAI: GoogleGenerativeAI;
+  private defaultApiKey: string;
 
   constructor() {
-    const GEMINI_API_KEY = envConfig.GEMINI.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
+    this.defaultApiKey = envConfig.GEMINI.GEMINI_API_KEY;
+    if (!this.defaultApiKey) {
       throw new Error('GEMINI_API_KEY is not defined in environment variables');
     }
-    this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    this.logger.log('GoogleGenerativeAI client initialized');
+    this.genAI = new GoogleGenerativeAI(this.defaultApiKey);
+    this.logger.log(
+      'GoogleGenerativeAI client initialized with default API key',
+    );
   }
 
   // Process GEMINI stream and emit to client
@@ -27,7 +30,14 @@ export class GeminiService {
       ? payload.model
       : envConfig.GEMINI.GEMINI_MODEL;
 
-    const model = this.genAI.getGenerativeModel({
+    // Use provided API key or fall back to default
+    const apiKey = payload.api_key || this.defaultApiKey;
+    this.logger.log(
+      `Using API key: ${apiKey.substring(0, 10)}... for client: ${client.id}`,
+    );
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
       model: useModel,
     });
     const chat = model.startChat({ history: payload.history || [] });
