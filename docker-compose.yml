@@ -14,5 +14,30 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gemini_chat_backend
+    environment:
+      DATABASE_URL: postgres://user:password@postgres:5432/gemini_chat_db
+      DB_HOST: postgres
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gemini_chat_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   postgres_data:
