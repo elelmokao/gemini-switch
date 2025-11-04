@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -8,7 +8,19 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+interface ApiKey {
+    id: string;
+    api_key: string;
+    description: string | null;
+    user_id: string | null;
+    token_used: number;
+    created_at: string;
+}
+
 export default function PersonaManagePage() {
+    const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+    const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+    
     const [personas, setPersonas] = useState<{
         name: string;
         description: string | null;
@@ -32,25 +44,43 @@ export default function PersonaManagePage() {
             description: "Handles customer queries and support.",
             system_prompt: "You are a helpful customer support agent.",
             model_used: "Gemini-2.0-flash",
-            api_key_id: "default-support"
         },
         {
             name: "Content Writer",
             description: "Creates engaging blog posts.",
             system_prompt: "You are a creative content writer.",
             model_used: "Gemini-2.0-pro",
-            api_key_id: "default-writer"
         },
         {
             name: "Code Assistant",
             description: "Helps with programming questions.",
             system_prompt: "You are an expert programming assistant.",
             model_used: "Gemini-2.5-flash",
-            api_key_id: "default-coder"
         }
     ];
 
     const [roleDialogIdx, setRoleDialogIdx] = useState<number | null>(null);
+
+    // Fetch API Keys from backend
+    useEffect(() => {
+        const fetchApiKeys = async () => {
+            try {
+                setLoadingApiKeys(true);
+                const response = await fetch('http://localhost:3000/api_keys');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch API keys');
+                }
+                const data: ApiKey[] = await response.json();
+                setApiKeys(data);
+            } catch (error) {
+                console.error('Error fetching API keys:', error);
+            } finally {
+                setLoadingApiKeys(false);
+            }
+        };
+
+        fetchApiKeys();
+    }, []);
 
     const handleAdd = () => {
         if (!newPersona.name.trim() || !newPersona.system_prompt.trim() || !newPersona.model_used.trim() || !newPersona.api_key_id.trim()) return;
@@ -103,15 +133,11 @@ export default function PersonaManagePage() {
                                                 <Label htmlFor="username-1">Model</Label>
                                                 <div className="p-2 bg-muted rounded">{persona.model_used}</div>
                                             </div>
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="username-1">API Key ID</Label>
-                                                <div className="p-2 bg-muted rounded font-mono">{persona.api_key_id}</div>
-                                            </div>
                                         </div>
                                         <DialogFooter className="flex gap-2">
                                             <Button
                                                 onClick={() => {
-                                                    setNewPersona({ ...persona });
+                                                    setNewPersona({ ...persona, api_key_id: apiKeys[0]?.id || "" });
                                                     setRoleDialogIdx(null);
                                                 }}
                                             >Apply</Button>
@@ -155,11 +181,26 @@ export default function PersonaManagePage() {
                                 <SelectItem value="Gemini-2.5-pro">Gemini-2.5-pro</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Input
-                            placeholder="API Key ID"
+                        <Select
                             value={newPersona.api_key_id}
-                            onChange={e => setNewPersona({ ...newPersona, api_key_id: e.target.value })}
-                        />
+                            onValueChange={value => setNewPersona({ ...newPersona, api_key_id: value })}
+                            disabled={loadingApiKeys}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder={loadingApiKeys ? "Loading API Keys..." : "Select API Key"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {apiKeys.length === 0 ? (
+                                    <SelectItem value="no-keys" disabled>No API Keys Available</SelectItem>
+                                ) : (
+                                    apiKeys.map((key) => (
+                                        <SelectItem key={key.id} value={key.id}>
+                                            {key.description || `API Key (${key.api_key.slice(0, 8)}...)`}
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
                     </div>
                     <Button
                         onClick={handleAdd}
