@@ -14,6 +14,7 @@ import { DropdownMenu,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { ApiManageCard } from "./api-manage-card"
@@ -23,6 +24,9 @@ import {
   PlusIcon,
   Search,
   Settings,
+  Pencil,
+  Trash2,
+  MoreVertical,
 } from "lucide-react"
 import { useChatroomContext } from "../contexts/useChatroomContext"
 import type { Chatroom } from "../contexts/ChatroomContext"
@@ -71,10 +75,13 @@ function groupChatroomsByTime(chatrooms: Chatroom[]): ConversationGroup[] {
 export function ChatSidebar() {
   const [openApiDialog, setOpenApiDialog] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<ConversationGroup[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState("")
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const navigate = useNavigate()
   
   // Use the chatroom context
-  const { chatrooms, refreshChatrooms, isLoading, error } = useChatroomContext()
+  const { chatrooms, refreshChatrooms, updateChatroom, deleteChatroom, isLoading, error } = useChatroomContext()
 
   // Update conversation history when chatrooms change
   useEffect(() => {
@@ -85,6 +92,42 @@ export function ChatSidebar() {
   useEffect(() => {
     refreshChatrooms()
   }, [refreshChatrooms])
+
+  const handleStartEdit = (id: string, currentTitle: string) => {
+    setEditingId(id)
+    setEditTitle(currentTitle)
+  }
+
+  const handleSaveEdit = async () => {
+    if (editingId && editTitle.trim()) {
+      try {
+        await updateChatroom(editingId, editTitle.trim())
+        setEditingId(null)
+        setEditTitle("")
+      } catch (error) {
+        console.error('Failed to update chatroom:', error)
+      }
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setEditTitle("")
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteChatroom(id)
+      setDeleteConfirmId(null)
+      // If we deleted the current chatroom, navigate to home
+      if (window.location.pathname === `/${id}`) {
+        navigate("/")
+      }
+    } catch (error) {
+      console.error('Failed to delete chatroom:', error)
+    }
+  }
+
   return (
     <Sidebar>
       <SidebarHeader className="flex flex-row items-center justify-between gap-2 px-2 py-4">
@@ -144,12 +187,73 @@ export function ChatSidebar() {
               <SidebarGroupLabel>{group.period}</SidebarGroupLabel>
               <SidebarMenu>
                 {group.conversations.map((conversation) => (
-                  <SidebarMenuButton 
-                    key={conversation.id}
-                    onClick={() => navigate(`/${conversation.id}`)}
-                  >
-                    <span className="truncate">{conversation.title}</span>
-                  </SidebarMenuButton>
+                  <div key={conversation.id} className="group flex items-center gap-1 pr-2 hover:bg-sidebar-accent rounded-md">
+                    {editingId === conversation.id ? (
+                      <div className="flex items-center gap-1 flex-1 px-2">
+                        <Input
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit()
+                            if (e.key === 'Escape') handleCancelEdit()
+                          }}
+                          className="h-8 text-sm"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleSaveEdit}
+                          className="h-8 px-2"
+                        >
+                          ✓
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleCancelEdit}
+                          className="h-8 px-2"
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <SidebarMenuButton 
+                          onClick={() => navigate(`/${conversation.id}`)}
+                          className="flex-1"
+                        >
+                          <span className="truncate">{conversation.title}</span>
+                        </SidebarMenuButton>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              onClick={() => handleStartEdit(conversation.id, conversation.title)}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setDeleteConfirmId(conversation.id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </>
+                    )}
+                  </div>
                 ))}
               </SidebarMenu>
             </SidebarGroup>
@@ -176,6 +280,26 @@ export function ChatSidebar() {
               Add, view, or remove your API keys below.
             </DialogDescription>
             <ApiManageCard />
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+          <DialogContent>
+            <DialogTitle>Delete Chatroom</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this chatroom? This action cannot be undone.
+            </DialogDescription>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+              >
+                Delete
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </SidebarFooter>

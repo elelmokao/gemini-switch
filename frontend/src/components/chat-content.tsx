@@ -172,7 +172,10 @@ export function ChatContent() {
       const newId = `temp-${Date.now()}`
       // 1. push 一則完整 assistant 訊息到 chatMessages
       setChatMessages(prev => {
-        const newMessages = [...prev, { id: newId, role: 'assistant', content }]
+        const newMessages: ChatMessage[] = [
+          ...prev,
+          { id: newId, role: "assistant", content }
+        ]
         console.log('[assistantContentRef] Push assistant message:', { id: newId, content })
         return newMessages
       })

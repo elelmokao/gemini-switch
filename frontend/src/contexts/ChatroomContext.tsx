@@ -46,10 +46,52 @@ export function ChatroomProvider({ children }: ChatroomProviderProps) {
     }
   }, [])
 
+  const updateChatroom = useCallback(async (id: string, title: string) => {
+    try {
+      const response = await fetch(`http://localhost:3000/chatrooms/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update chatroom: ${response.statusText}`)
+      }
+      
+      // Refresh chatrooms to get updated data
+      await refreshChatrooms()
+    } catch (err) {
+      console.error('Error updating chatroom:', err)
+      throw err
+    }
+  }, [refreshChatrooms])
+
+  const deleteChatroom = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`http://localhost:3000/chatrooms/${id}`, {
+        method: 'DELETE',
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to delete chatroom: ${response.statusText}`)
+      }
+      
+      // Refresh chatrooms to get updated list
+      await refreshChatrooms()
+    } catch (err) {
+      console.error('Error deleting chatroom:', err)
+      throw err
+    }
+  }, [refreshChatrooms])
+
   const value: ChatroomContextType = {
     chatrooms,
     setChatrooms,
     refreshChatrooms,
+    updateChatroom,
+    deleteChatroom,
     isLoading,
     error,
   }

@@ -14,7 +14,7 @@ export class ChatroomMessages {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Chatrooms, { nullable: false })
+  @ManyToOne(() => Chatrooms, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'chatroom_id' })
   chatroom_id: Chatrooms;
 

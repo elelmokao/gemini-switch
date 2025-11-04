@@ -1,6 +1,7 @@
-import { Controller, Delete, Get, Post, Body } from '@nestjs/common';
+import { Controller, Delete, Get, Post, Put, Body, Param } from '@nestjs/common';
 import { ChatroomsService } from './chatrooms.service';
 import type { CreateChatroomsDto } from './dto/create_chatrooms.dto';
+import type { UpdateChatroomsDto } from './dto/update_chatrooms.dto';
 
 @Controller('chatrooms')
 export class ChatroomsController {
@@ -17,12 +18,17 @@ export class ChatroomsController {
   }
 
   @Get(':id')
-  findOne(id: string) {
+  findOne(@Param('id') id: string) {
     return this.chatroomsService.findOne(id);
   }
 
+  @Put(':id')
+  update(@Param('id') id: string, @Body() updateChatroomsDto: UpdateChatroomsDto) {
+    return this.chatroomsService.update(id, updateChatroomsDto);
+  }
+
   @Delete(':id')
-  remove(id: string) {
+  remove(@Param('id') id: string) {
     return this.chatroomsService.remove(id);
   }
 }
