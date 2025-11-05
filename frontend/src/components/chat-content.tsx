@@ -38,15 +38,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useChatroomContext } from "../contexts/useChatroomContext"
 import { io, Socket } from "socket.io-client"
-
-// Interfaces for chatroom data
-interface Chatroom {
-  id: string
-  title: string
-  base_persona_id: string
-  created_at: string
-  updated_at: string
-}
+import { apiService, type ApiKey, type Chatroom } from "@/services/api.service"
 
 // Message interface for better type safety
 interface ChatMessage {
@@ -62,16 +54,6 @@ interface BackendMessage {
   role: string
   content: string
   persona_id: string | null
-  created_at: string
-}
-
-// API Key interface for backend response
-interface ApiKey {
-  id: string
-  user_id: string | null
-  api_key: string
-  description: string | null
-  token_used: number
   created_at: string
 }
 
@@ -106,13 +88,7 @@ export function ChatContent() {
   const fetchApiKeys = useCallback(async () => {
     try {
       setIsLoadingApiKeys(true)
-      const response = await fetch('http://localhost:3000/api_keys')
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch API keys: ${response.statusText}`)
-      }
-      
-      const apiKeysData: ApiKey[] = await response.json()
+      const apiKeysData = await apiService.getApiKeys()
       setApiKeys(apiKeysData)
       
       // Set the first API key as selected by default if available
@@ -181,24 +157,12 @@ export function ChatContent() {
       })
       // 2. 儲存到資料庫
       if (currentChatroomId) {
-        fetch('http://localhost:3000/chatroom-messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            chatroom_id: currentChatroomId,
-            role: 'assistant',
-            content,
-            persona_id: null,
-          }),
+        apiService.createMessage({
+          chatroom_id: currentChatroomId,
+          role: 'assistant',
+          content,
+          persona_id: null,
         })
-          .then(response => {
-            if (response.ok) {
-              return response.json()
-            }
-            throw new Error('Failed to save assistant message')
-          })
           .then(savedMessage => {
             console.log('[assistantContentRef] Assistant message saved to database:', savedMessage.id)
             setChatMessages(current => {
@@ -250,54 +214,46 @@ export function ChatContent() {
     const fetchChatroom = async () => {
       try {
         setIsLoadingChatroom(true)
-        const response = await fetch(`http://localhost:3000/chatrooms/${chatroomId}`)
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch chatroom: ${response.statusText}`)
-        }
-        
-        const chatroomData: Chatroom = await response.json()
+        const chatroomData = await apiService.getChatroom(chatroomId)
         setChatroom(chatroomData)
         
         // Load existing messages from database
         try {
-          const messagesResponse = await fetch(`http://localhost:3000/chatroom-messages/${chatroomId}`)
-          if (messagesResponse.ok) {
-            const messages = await messagesResponse.json()
-            // Sort messages by creation time to ensure proper order
-            const sortedMessages = messages.sort((a: BackendMessage, b: BackendMessage) => 
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            )
-            const formattedMessages: ChatMessage[] = sortedMessages.map((msg: BackendMessage, index: number) => ({
-              id: msg.id || index + 1,
-              role: msg.role as "user" | "assistant",
-              content: msg.content,
-            }))
-            setChatMessages(formattedMessages)
+          const messages = await apiService.getChatroomMessages(chatroomId)
+          // Sort messages by creation time to ensure proper order
+          const sortedMessages = messages.sort((a: BackendMessage, b: BackendMessage) => 
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          )
+          const formattedMessages: ChatMessage[] = sortedMessages.map((msg: BackendMessage, index: number) => ({
+            id: msg.id || index + 1,
+            role: msg.role as "user" | "assistant",
+            content: msg.content,
+          }))
+          setChatMessages(formattedMessages)
+          
+          // Check if we have an initial message from navigation state (for newly created chatrooms)
+          // and if there's only one message (the user message we just created)
+          const initialMessage = (location.state && typeof location.state === 'object' && 'initialMessage' in location.state 
+            ? (location.state as { initialMessage: string }).initialMessage 
+            : null) || sessionStorage.getItem(`initialMessage_${chatroomId}`)
             
-            // Check if we have an initial message from navigation state (for newly created chatrooms)
-            // and if there's only one message (the user message we just created)
-            const initialMessage = (location.state && typeof location.state === 'object' && 'initialMessage' in location.state 
-              ? (location.state as { initialMessage: string }).initialMessage 
-              : null) || sessionStorage.getItem(`initialMessage_${chatroomId}`)
-              
-            if (initialMessage && formattedMessages.length === 1 && formattedMessages[0].role === 'user') {
-              // Clear the sessionStorage item since we're using it
-              sessionStorage.removeItem(`initialMessage_${chatroomId}`)
-              
-              // This is a newly created chatroom with only the initial user message
-              // Generate AI response via WebSocket like Vue version
-              setTimeout(() => {
-                if (socket && socket.connected && selectedApiKey) {
-                  setIsLoading(true)
-                  
-                  // Build history from existing messages
-                  const historyForApi = formattedMessages
-                    .filter(msg => msg.content && msg.content.trim() !== '')
-                    .map(msg => ({
-                      role: msg.role === 'user' ? 'user' : 'model',
-                      parts: [{ text: msg.content }],
-                    }))
+          if (initialMessage && formattedMessages.length === 1 && formattedMessages[0].role === 'user') {
+            // Clear the sessionStorage item since we're using it
+            sessionStorage.removeItem(`initialMessage_${chatroomId}`)
+            
+            // This is a newly created chatroom with only the initial user message
+            // Generate AI response via WebSocket like Vue version
+            setTimeout(() => {
+              if (socket && socket.connected && selectedApiKey) {
+                setIsLoading(true)
+                
+                // Build history from existing messages
+                const historyForApi = formattedMessages
+                  .filter(msg => msg.content && msg.content.trim() !== '')
+                  .map(msg => ({
+                    role: msg.role === 'user' ? 'user' : 'model',
+                    parts: [{ text: msg.content }],
+                  }))
                   
                   // Don't add empty assistant message here - let new_chunk handle it
                   
@@ -316,10 +272,6 @@ export function ChatContent() {
                 }
               }, 500) // Small delay to ensure socket is ready
             }
-          } else {
-            // If no messages found, start with empty array
-            setChatMessages([])
-          }
         } catch (err) {
           console.error('Error loading messages:', err)
           setChatMessages([])
@@ -348,40 +300,18 @@ export function ChatContent() {
       try {
         // Step 1: Create the chatroom
         const title = userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '') // Use first 50 chars as title
-        const chatroomResponse = await fetch('http://localhost:3000/chatrooms', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: title,
-            persona_ids: [],
-          }),
+        const newChatroom = await apiService.createChatroom({
+          title: title,
+          persona_ids: [],
         })
-
-        if (!chatroomResponse.ok) {
-          throw new Error(`Failed to create chatroom: ${chatroomResponse.statusText}`)
-        }
-
-        const newChatroom = await chatroomResponse.json()
 
         // Step 2: Create the user message in the chatroom
-        const messageResponse = await fetch('http://localhost:3000/chatroom-messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            chatroom_id: newChatroom.id,
-            role: 'user',
-            content: userMessage,
-            persona_id: null,
-          }),
+        await apiService.createMessage({
+          chatroom_id: newChatroom.id,
+          role: 'user',
+          content: userMessage,
+          persona_id: null,
         })
-
-        if (!messageResponse.ok) {
-          throw new Error(`Failed to create message: ${messageResponse.statusText}`)
-        }
 
         // Refresh the chatroom list in sidebar
         await refreshChatrooms()
@@ -405,24 +335,12 @@ export function ChatContent() {
     // If we have a chatroom ID, proceed with normal message handling
     try {
       // Save user message to database
-      const messageResponse = await fetch('http://localhost:3000/chatroom-messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chatroom_id: chatroomId,
-          role: 'user',
-          content: userMessage,
-          persona_id: null,
-        }),
+      const savedMessage = await apiService.createMessage({
+        chatroom_id: chatroomId,
+        role: 'user',
+        content: userMessage,
+        persona_id: null,
       })
-
-      if (!messageResponse.ok) {
-        throw new Error(`Failed to save message: ${messageResponse.statusText}`)
-      }
-
-      const savedMessage = await messageResponse.json()
 
       // Add user message to UI immediately
       const newUserMessage: ChatMessage = {
