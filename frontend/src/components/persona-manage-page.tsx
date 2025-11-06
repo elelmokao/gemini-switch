@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { apiService, type Persona } from "@/services/api.service";
 
 interface ApiKey {
     id: string;
@@ -21,13 +22,8 @@ export default function PersonaManagePage() {
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
     const [loadingApiKeys, setLoadingApiKeys] = useState(true);
     
-    const [personas, setPersonas] = useState<{
-        name: string;
-        description: string | null;
-        system_prompt: string;
-        model_used: string;
-        api_key_id: string;
-    }[]>([]);
+    const [personas, setPersonas] = useState<Persona[]>([]);
+    const [loadingPersonas, setLoadingPersonas] = useState(true);
 
     const [newPersona, setNewPersona] = useState({
         name: "",
@@ -66,11 +62,7 @@ export default function PersonaManagePage() {
         const fetchApiKeys = async () => {
             try {
                 setLoadingApiKeys(true);
-                const response = await fetch('http://localhost:3000/api_keys');
-                if (!response.ok) {
-                    throw new Error('Failed to fetch API keys');
-                }
-                const data: ApiKey[] = await response.json();
+                const data = await apiService.getApiKeys();
                 setApiKeys(data);
             } catch (error) {
                 console.error('Error fetching API keys:', error);
@@ -82,23 +74,51 @@ export default function PersonaManagePage() {
         fetchApiKeys();
     }, []);
 
-    const handleAdd = () => {
+    // Fetch Personas from backend
+    useEffect(() => {
+        const fetchPersonas = async () => {
+            try {
+                setLoadingPersonas(true);
+                const data = await apiService.getPersonas();
+                setPersonas(data);
+            } catch (error) {
+                console.error('Error fetching personas:', error);
+            } finally {
+                setLoadingPersonas(false);
+            }
+        };
+
+        fetchPersonas();
+    }, []);
+
+    const handleAdd = async () => {
         if (!newPersona.name.trim() || !newPersona.system_prompt.trim() || !newPersona.model_used.trim() || !newPersona.api_key_id.trim()) return;
-        setPersonas([
-            ...personas,
-            {
+        
+        try {
+            const createdPersona = await apiService.createPersona({
                 name: newPersona.name.trim(),
                 description: newPersona.description.trim() ? newPersona.description.trim() : null,
                 system_prompt: newPersona.system_prompt.trim(),
                 model_used: newPersona.model_used.trim(),
                 api_key_id: newPersona.api_key_id.trim()
-            }
-        ]);
-        setNewPersona({ name: "", description: "", system_prompt: "", model_used: "", api_key_id: "" });
+            });
+            
+            setPersonas([...personas, createdPersona]);
+            setNewPersona({ name: "", description: "", system_prompt: "", model_used: "Gemini-2.0-flash", api_key_id: "" });
+        } catch (error) {
+            console.error('Error creating persona:', error);
+            alert('Failed to create persona. Please try again.');
+        }
     };
 
-    const handleRemove = (idx: number) => {
-        setPersonas(personas.filter((_, i) => i !== idx));
+    const handleRemove = async (id: string) => {
+        try {
+            await apiService.deletePersona(id);
+            setPersonas(personas.filter(p => p.id !== id));
+        } catch (error) {
+            console.error('Error deleting persona:', error);
+            alert('Failed to delete persona. Please try again.');
+        }
     };
 
     return (
@@ -220,16 +240,21 @@ export default function PersonaManagePage() {
                     <CardTitle>Personas List</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {personas.length === 0 ? (
+                    {loadingPersonas ? (
+                        <div className="text-muted-foreground flex items-center justify-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                            <span>Loading personas...</span>
+                        </div>
+                    ) : personas.length === 0 ? (
                         <div className="text-muted-foreground">No personas.</div>
                     ) : (
                         <div className="space-y-4">
-                            {personas.map((persona, idx) => (
-                                <Card key={idx} className="bg-background">
+                            {personas.map((persona) => (
+                                <Card key={persona.id} className="bg-background">
                                     <CardContent className="p-4">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="font-bold text-lg">{persona.name}</span>
-                                            <Button variant="destructive" size="sm" onClick={() => handleRemove(idx)}>
+                                            <Button variant="destructive" size="sm" onClick={() => handleRemove(persona.id)}>
                                                 Delete
                                             </Button>
                                         </div>
