@@ -1,44 +1,16 @@
 "use client"
 
-import {
-  ChatContainerContent,
-  ChatContainerRoot,
-} from "@/components/ui/chat-container"
-import {
-  Message,
-  MessageAction,
-  MessageActions,
-  MessageContent,
-} from "@/components/ui/message"
-import {
-  PromptInput,
-  PromptInputAction,
-  PromptInputActions,
-  PromptInputTextarea,
-} from "@/components/ui/prompt-input"
-import { ScrollButton } from "@/components/ui/scroll-button"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import {
-  ArrowUp,
-  Copy,
-  Globe,
-  Mic,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  RefreshCw,
-  ThumbsDown,
-  ThumbsUp,
-  Trash,
-} from "lucide-react"
-import { useRef, useState, useEffect, useCallback } from "react"
+import { useRef, useState, useEffect } from "react"
 import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useChatroomContext } from "../contexts/useChatroomContext"
 import { io, Socket } from "socket.io-client"
-import { apiService, type ApiKey, type Chatroom } from "@/services/api.service"
+import { apiService, type Chatroom } from "@/services/api.service"
+import { useApiKeys } from "@/hooks/useApiKeys"
+import { ChatHeader } from "./chat/ChatHeader"
+import { ChatMessages } from "./chat/ChatMessages"
+import { ChatInput } from "./chat/ChatInput"
+import { EmptyState } from "./chat/EmptyState"
 
 // Message interface for better type safety
 interface ChatMessage {
@@ -68,13 +40,26 @@ export function ChatContent() {
   const [chatroom, setChatroom] = useState<Chatroom | null>(null)
   const [isLoadingChatroom, setIsLoadingChatroom] = useState(!!chatroomId)
   const [error, setError] = useState<string | null>(null)
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
-  const [selectedApiKey, setSelectedApiKey] = useState<string>("")
-  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false)
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnecting, setIsConnecting] = useState(false)
-  const chatContainerRef = useRef<HTMLDivElement>(null)
   const chatroomIdRef = useRef<string | undefined>(chatroomId)
+  
+  // Use API Keys hook
+  const { 
+    apiKeys, 
+    selectedApiKey, 
+    setSelectedApiKey, 
+    isLoading: isLoadingApiKeys,
+    error: apiKeysError,
+    refetch: fetchApiKeys 
+  } = useApiKeys()
+  
+  // Merge API keys error into general error if needed
+  useEffect(() => {
+    if (apiKeysError && !error) {
+      setError(apiKeysError)
+    }
+  }, [apiKeysError, error])
   
   // Update chatroomId ref when it changes
   useEffect(() => {
@@ -84,33 +69,11 @@ export function ChatContent() {
   // Get the refresh function from context
   const { refreshChatrooms } = useChatroomContext()
 
-  // Fetch API keys from backend
-  const fetchApiKeys = useCallback(async () => {
-    try {
-      setIsLoadingApiKeys(true)
-      const apiKeysData = await apiService.getApiKeys()
-      setApiKeys(apiKeysData)
-      
-      // Set the first API key as selected by default if available
-      if (apiKeysData.length > 0 && !selectedApiKey) {
-        setSelectedApiKey(apiKeysData[0].api_key)
-      }
-    } catch (err) {
-      console.error('Error fetching API keys:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load API keys')
-    } finally {
-      setIsLoadingApiKeys(false)
-    }
-  }, [selectedApiKey])
-
-  // Fetch API keys when component mounts
-  useEffect(() => {
-    fetchApiKeys()
-  }, [fetchApiKeys]) // Add fetchApiKeys as dependency
-
   // Initialize WebSocket connection
   useEffect(() => {
     console.log('Initializing WebSocket connection...')
+    setIsConnecting(true)
+    
     const socketInstance = io('http://localhost:3000', {
       transports: ['websocket'],
     })
@@ -122,6 +85,7 @@ export function ChatContent() {
 
     socketInstance.on('disconnect', (reason) => {
       console.log('Disconnected from server. Reason:', reason)
+      setIsConnecting(true)
     })
 
     socketInstance.on('error', (error) => {
@@ -431,246 +395,36 @@ export function ChatContent() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      <header className="bg-background z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <div className="text-foreground">{chatroom?.title || "New Chat"}</div>
-        {(isConnecting || !socket?.connected) && (
-          <div className="text-sm text-muted-foreground">
-            {isConnecting ? "Connecting..." : "Disconnected"}
-          </div>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder={isLoadingApiKeys ? "Loading..." : "Select API Key"} />
-            </SelectTrigger>
-            <SelectContent>
-              {isLoadingApiKeys ? (
-                <SelectItem value="loading" disabled>Loading API keys...</SelectItem>
-              ) : apiKeys.length === 0 ? (
-                <SelectItem value="no-api-keys" disabled>No API keys available</SelectItem>
-              ) : (
-                apiKeys.map((apiKey) => (
-                  <SelectItem key={apiKey.id} value={apiKey.api_key}>
-                    {apiKey.description || apiKey.api_key.slice(0, 20) + '...'}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={fetchApiKeys}
-            disabled={isLoadingApiKeys}
-            className="h-10 w-10"
-            title="Reload API keys"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoadingApiKeys ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </header>
+      <ChatHeader
+        title={chatroom?.title || "New Chat"}
+        isConnecting={isConnecting}
+        socketConnected={socket?.connected || false}
+        apiKeys={apiKeys}
+        selectedApiKey={selectedApiKey}
+        isLoadingApiKeys={isLoadingApiKeys}
+        onApiKeyChange={setSelectedApiKey}
+        onRefreshApiKeys={fetchApiKeys}
+      />
 
-      <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto">
-        <ChatContainerRoot className="h-full">
-          <ChatContainerContent className="space-y-0 px-5 py-12">
-            {chatMessages.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center max-w-md mx-auto">
-                  <h2 className="text-2xl font-semibold text-foreground mb-4">
-                    Welcome to Gemini Switch
-                  </h2>
-                  <p className="text-muted-foreground mb-8">
-                    Start a conversation by typing your message below. I'm here to help with any questions or tasks you have.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              chatMessages.map((message, index) => {
-              const isAssistant = message.role === "assistant"
-              const isLastMessage = index === chatMessages.length - 1
+      <ChatMessages messages={chatMessages}>
+        <EmptyState />
+      </ChatMessages>
 
-              return (
-                <Message
-                  key={message.id}
-                  className={cn(
-                    "mx-auto flex w-full max-w-3xl flex-col gap-2 px-6",
-                    isAssistant ? "items-start" : "items-end"
-                  )}
-                >
-                  {isAssistant ? (
-                    <div className="group flex w-full flex-col gap-0">
-                      <MessageContent
-                        className="text-foreground prose flex-1 rounded-lg bg-transparent p-0"
-                        markdown
-                      >
-                        {message.content}
-                      </MessageContent>
-                      <MessageActions
-                        className={cn(
-                          "-ml-2.5 flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                          isLastMessage && "opacity-100"
-                        )}
-                      >
-                        <MessageAction tooltip="Copy" delayDuration={100}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                          >
-                            <Copy />
-                          </Button>
-                        </MessageAction>
-                        <MessageAction tooltip="Upvote" delayDuration={100}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                          >
-                            <ThumbsUp />
-                          </Button>
-                        </MessageAction>
-                        <MessageAction tooltip="Downvote" delayDuration={100}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                          >
-                            <ThumbsDown />
-                          </Button>
-                        </MessageAction>
-                      </MessageActions>
-                    </div>
-                  ) : (
-                    <div className="group flex flex-col items-end gap-1">
-                      <MessageContent className="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5 sm:max-w-[75%]">
-                        {message.content}
-                      </MessageContent>
-                      <MessageActions
-                        className={cn(
-                          "flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                        )}
-                      >
-                        <MessageAction tooltip="Edit" delayDuration={100}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                          >
-                            <Pencil />
-                          </Button>
-                        </MessageAction>
-                        <MessageAction tooltip="Delete" delayDuration={100}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                          >
-                            <Trash />
-                          </Button>
-                        </MessageAction>
-                        <MessageAction tooltip="Copy" delayDuration={100}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                          >
-                            <Copy />
-                          </Button>
-                        </MessageAction>
-                      </MessageActions>
-                    </div>
-                  )}
-                </Message>
-              )
-              })
-            )}
-          </ChatContainerContent>
-          <div className="absolute bottom-4 left-1/2 flex w-full max-w-3xl -translate-x-1/2 justify-end px-5">
-            <ScrollButton className="shadow-sm" />
-          </div>
-        </ChatContainerRoot>
-      </div>
-
-      <div className="bg-background z-10 shrink-0 px-3 pb-3 md:px-5 md:pb-5">
-        <div className="mx-auto max-w-3xl">
-          <PromptInput
-            isLoading={isLoading}
-            value={prompt}
-            onValueChange={setPrompt}
-            onSubmit={handleSubmit}
-            className="border-input bg-popover relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-xs"
-          >
-            <div className="flex flex-col">
-              <PromptInputTextarea
-                placeholder="Ask anything"
-                className="min-h-[44px] pt-3 pl-4 text-base leading-[1.3] sm:text-base md:text-base"
-              />
-
-              <PromptInputActions className="mt-5 flex w-full items-center justify-between gap-2 px-3 pb-3">
-                <div className="flex items-center gap-2">
-                  <PromptInputAction tooltip="Add a new action">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-9 rounded-full"
-                    >
-                      <Plus size={18} />
-                    </Button>
-                  </PromptInputAction>
-
-                  <PromptInputAction tooltip="Search">
-                    <Button variant="outline" className="rounded-full">
-                      <Globe size={18} />
-                      Search
-                    </Button>
-                  </PromptInputAction>
-
-                  <PromptInputAction tooltip="More actions">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-9 rounded-full"
-                    >
-                      <MoreHorizontal size={18} />
-                    </Button>
-                  </PromptInputAction>
-                </div>
-                <div className="flex items-center gap-2">
-                  <PromptInputAction tooltip="Voice input">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-9 rounded-full"
-                    >
-                      <Mic size={18} />
-                    </Button>
-                  </PromptInputAction>
-
-                  <Button
-                    size="icon"
-                    disabled={!prompt.trim() || isLoading || !socket?.connected || !selectedApiKey}
-                    onClick={handleSubmit}
-                    className="size-9 rounded-full"
-                    title={
-                      !socket?.connected ? "WebSocket disconnected" :
-                      !selectedApiKey ? "Please select an API key" :
-                      !prompt.trim() ? "Enter a message" :
-                      isLoading ? "Sending..." : "Send message"
-                    }
-                  >
-                    {!isLoading ? (
-                      <ArrowUp size={18} />
-                    ) : (
-                      <span className="size-3 rounded-xs bg-white" />
-                    )}
-                  </Button>
-                </div>
-              </PromptInputActions>
-            </div>
-          </PromptInput>
-        </div>
-      </div>
+      <ChatInput
+        value={prompt}
+        isLoading={isLoading}
+        isConnecting={isConnecting}
+        isDisabled={!prompt.trim() || isLoading || isConnecting || !socket?.connected || !selectedApiKey}
+        disabledReason={
+          isConnecting ? "Connecting to server..." :
+          !socket?.connected ? "WebSocket disconnected" :
+          !selectedApiKey ? "Please select an API key" :
+          !prompt.trim() ? "Enter a message" :
+          undefined
+        }
+        onValueChange={setPrompt}
+        onSubmit={handleSubmit}
+      />
     </main>
   )
 }
