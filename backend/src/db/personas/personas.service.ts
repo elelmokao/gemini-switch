@@ -30,6 +30,13 @@ export class PersonasService {
     return this.personasRepository.findOne({ where: { id } });
   }
 
+  async getPersonasByIds(ids: string[]): Promise<Personas[]> {
+    if (!ids || ids.length === 0) {
+      return [];
+    }
+    return this.personasRepository.findByIds(ids);
+  }
+
   async deletePersona(id: string): Promise<void> {
     await this.personasRepository.delete(id);
   }

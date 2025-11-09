@@ -26,9 +26,12 @@ export class GeminiService {
     client: Socket,
     payload: ChatPayload,
   ): Promise<void> {
-    const useModel = ALLOWED_MODELS.includes(payload.model)
-      ? payload.model
-      : envConfig.GEMINI.GEMINI_MODEL;
+    // Determine which model to use: persona's model > payload model > default
+    const useModel = payload.persona_model
+      ? payload.persona_model
+      : ALLOWED_MODELS.includes(payload.model)
+        ? payload.model
+        : envConfig.GEMINI.GEMINI_MODEL;
 
     // Use provided API key or fall back to default
     const apiKey = payload.api_key || this.defaultApiKey;
@@ -37,13 +40,37 @@ export class GeminiService {
     );
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
+
+    // Build model configuration with proper typing
+    const modelConfig: {
+      model: string;
+      systemInstruction?: string;
+    } = {
       model: useModel,
-    });
+    };
+
+    // Add system instruction if provided by persona
+    if (payload.system_instruction) {
+      modelConfig.systemInstruction = payload.system_instruction;
+      this.logger.log(
+        `[SYSTEM INSTRUCTION] Using persona system instruction for client: ${client.id}`,
+      );
+      this.logger.log(
+        `[SYSTEM INSTRUCTION] Content: ${payload.system_instruction.substring(0, 150)}...`,
+      );
+    } else {
+      this.logger.log(
+        `[SYSTEM INSTRUCTION] No system instruction provided for client: ${client.id}`,
+      );
+    }
+
+    const model = genAI.getGenerativeModel(modelConfig);
     const chat = model.startChat({ history: payload.history || [] });
+
     this.logger.log(
-      `Starting stream for client: ${client.id} using model: ${useModel}`,
+      `Starting stream for client: ${client.id} using model: ${useModel}${payload.system_instruction ? ' WITH PERSONA SYSTEM INSTRUCTION ✓' : ' (no system instruction)'}`,
     );
+
     try {
       const result = await chat.sendMessageStream(payload.prompt);
 

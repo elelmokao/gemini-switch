@@ -22,7 +22,7 @@ interface ChatInputProps {
   isDisabled: boolean
   disabledReason?: string
   onValueChange: (value: string) => void
-  onSubmit: () => void
+  onSubmit: (mentionedPersonaIds: string[]) => void
 }
 
 export function ChatInput({
@@ -40,6 +40,7 @@ export function ChatInput({
   const [mentionSearch, setMentionSearch] = useState("")
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 })
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [mentionedPersonas, setMentionedPersonas] = useState<Map<string, string>>(new Map()) // Map<personaName, personaId>
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Fetch personas on component mount
@@ -94,6 +95,8 @@ export function ChatInput({
 
   // Insert mention into text
   const insertMention = (persona: Persona) => {
+    console.log('[insertMention] Inserting persona:', persona.name, 'ID:', persona.id)
+    
     const cursorPosition = inputRef.current?.selectionStart || 0
     const textBeforeCursor = value.slice(0, cursorPosition)
     const textAfterCursor = value.slice(cursorPosition)
@@ -102,6 +105,14 @@ export function ChatInput({
     const atPosition = textBeforeCursor.lastIndexOf('@')
     const beforeAt = value.slice(0, atPosition)
     const newValue = beforeAt + `@${persona.name} ` + textAfterCursor
+    
+    // Track this mentioned persona
+    setMentionedPersonas(prev => {
+      const updated = new Map(prev)
+      updated.set(persona.name, persona.id)
+      console.log('[insertMention] Updated map:', updated)
+      return updated
+    })
     
     onValueChange(newValue)
     setShowMentionMenu(false)
@@ -113,6 +124,36 @@ export function ChatInput({
       const newCursorPos = atPosition + persona.name.length + 2
       inputRef.current?.setSelectionRange(newCursorPos, newCursorPos)
     }, 0)
+  }
+
+  // Extract mentioned persona IDs from current text
+  const extractMentionedPersonaIds = (): string[] => {
+    console.log('[extractMentionedPersonaIds] Current value:', value)
+    console.log('[extractMentionedPersonaIds] Mentioned personas map:', mentionedPersonas)
+    
+    // Get IDs for mentions that still exist in the text
+    const ids: string[] = []
+    
+    // Check each persona in the map to see if it still exists in the text
+    mentionedPersonas.forEach((id, name) => {
+      // Look for @PersonaName (with or without trailing space)
+      if (value.includes(`@${name}`)) {
+        console.log(`[extractMentionedPersonaIds] Found mention "${name}", ID:`, id)
+        ids.push(id)
+      }
+    })
+    
+    console.log('[extractMentionedPersonaIds] Final IDs:', ids)
+    return ids
+  }
+
+  // Handle submit with mentioned persona IDs
+  const handleSubmitWithMentions = () => {
+    const mentionedIds = extractMentionedPersonaIds()
+    console.log('[handleSubmitWithMentions] Submitting with persona IDs:', mentionedIds)
+    onSubmit(mentionedIds)
+    // Clear mentioned personas after submit
+    setMentionedPersonas(new Map())
   }
 
   // Handle keyboard navigation in mention menu
@@ -136,7 +177,7 @@ export function ChatInput({
       }
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      onSubmit()
+      handleSubmitWithMentions()
     }
   }
 
@@ -196,7 +237,7 @@ export function ChatInput({
 
         <PromptInput
           isLoading={isLoading}
-          onSubmit={onSubmit}
+          onSubmit={handleSubmitWithMentions}
           className="border-input bg-popover relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-xs"
         >
           <div className="flex flex-col">
@@ -262,7 +303,7 @@ export function ChatInput({
                 <Button
                   size="icon"
                   disabled={isDisabled}
-                  onClick={onSubmit}
+                  onClick={handleSubmitWithMentions}
                   className="size-9 rounded-full"
                   title={disabledReason || (isLoading ? "Sending..." : "Send message")}
                 >

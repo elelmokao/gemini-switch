@@ -14,6 +14,7 @@ export interface Chatroom {
   id: string
   title: string
   base_persona_id: string
+  persona_ids: string[]
   created_at: string
   updated_at: string
 }

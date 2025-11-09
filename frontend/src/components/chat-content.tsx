@@ -31,6 +31,7 @@ interface BackendMessage {
 
 export function ChatContent() {
   const assistantContentRef = useRef("")
+  const currentPersonaIdRef = useRef<string | null>(null) // Track current persona ID for AI response
   const { chatroomId } = useParams<{ chatroomId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -125,10 +126,12 @@ export function ChatContent() {
           chatroom_id: currentChatroomId,
           role: 'assistant',
           content,
-          persona_id: null,
+          persona_id: currentPersonaIdRef.current, // Use the persona ID from the request
         })
           .then(savedMessage => {
             console.log('[assistantContentRef] Assistant message saved to database:', savedMessage.id)
+            // Clear the persona ID after saving
+            currentPersonaIdRef.current = null
             setChatMessages(current => {
               const updated = [...current]
               const messageIndex = updated.findIndex(msg =>
@@ -205,6 +208,13 @@ export function ChatContent() {
             // Clear the sessionStorage item since we're using it
             sessionStorage.removeItem(`initialMessage_${chatroomId}`)
             
+            // Get persona IDs from the chatroom (if any were mentioned during creation)
+            const chatroomPersonaIds = chatroomData.persona_ids || []
+            const firstPersonaId = chatroomPersonaIds.length > 0 ? chatroomPersonaIds[0] : null
+            
+            // Store persona ID for AI response
+            currentPersonaIdRef.current = firstPersonaId
+            
             // This is a newly created chatroom with only the initial user message
             // Generate AI response via WebSocket like Vue version
             setTimeout(() => {
@@ -225,7 +235,8 @@ export function ChatContent() {
                     prompt: initialMessage,
                     history: historyForApi,
                     model: 'gemini-1.5-flash',
-                    api_key: selectedApiKey
+                    api_key: selectedApiKey,
+                    mentioned_persona_ids: chatroomPersonaIds
                   }
                   console.log('Sending initial message via WebSocket:', payload)
                   socket.emit('chat', payload)
@@ -253,7 +264,7 @@ export function ChatContent() {
     fetchChatroom()
   }, [chatroomId, location.state, socket, selectedApiKey])
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (mentionedPersonaIds: string[] = []) => {
     if (!prompt.trim()) return
 
     const userMessage = prompt.trim()
@@ -266,7 +277,7 @@ export function ChatContent() {
         const title = userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '') // Use first 50 chars as title
         const newChatroom = await apiService.createChatroom({
           title: title,
-          persona_ids: [],
+          persona_ids: mentionedPersonaIds,
         })
 
         // Step 2: Create the user message in the chatroom
@@ -274,7 +285,7 @@ export function ChatContent() {
           chatroom_id: newChatroom.id,
           role: 'user',
           content: userMessage,
-          persona_id: null,
+          persona_id: mentionedPersonaIds.length > 0 ? mentionedPersonaIds[0] : null,
         })
 
         // Refresh the chatroom list in sidebar
@@ -303,7 +314,7 @@ export function ChatContent() {
         chatroom_id: chatroomId,
         role: 'user',
         content: userMessage,
-        persona_id: null,
+        persona_id: mentionedPersonaIds.length > 0 ? mentionedPersonaIds[0] : null,
       })
 
       // Add user message to UI immediately
@@ -317,6 +328,9 @@ export function ChatContent() {
 
       // Send message to AI via WebSocket if socket is connected
       if (socket && socket.connected && selectedApiKey) {
+        // Store the persona ID for later use when saving AI response
+        currentPersonaIdRef.current = mentionedPersonaIds.length > 0 ? mentionedPersonaIds[0] : null
+        
         // Build conversation history like Vue version
         const historyForApi = chatMessages
           .filter(msg => msg.content && msg.content.trim() !== '')
@@ -331,7 +345,8 @@ export function ChatContent() {
           prompt: userMessage,
           history: historyForApi,
           model: 'gemini-1.5-flash',
-          api_key: selectedApiKey
+          api_key: selectedApiKey,
+          mentioned_persona_ids: mentionedPersonaIds
         }
         console.log('Sending message via WebSocket:', payload)
         socket.emit('chat', payload)
